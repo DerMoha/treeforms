@@ -103,19 +103,19 @@ export function SubmissionsDashboard({ formId }: { formId: string }) {
   }
 
   return (
-    <main className="container" style={{ display: "grid", gap: "1rem" }}>
-      <section className="card" style={{ padding: "1.1rem", display: "grid", gap: "0.8rem" }}>
+    <main className="container page-stack">
+      <section className="card page-card">
         <div className="inline-stack">
-          <Link href={`/builder/forms/${formId}`} className="button-secondary" style={{ textDecoration: "none" }}>
+          <Link href={`/builder/forms/${formId}`} className="button-secondary">
             Back to Builder
           </Link>
           <span className="badge">Submissions</span>
         </div>
 
-        <h1 style={{ margin: 0 }}>{title}</h1>
-        {slug ? <p style={{ margin: 0, color: "var(--text-muted)" }}>slug: {slug}</p> : null}
+        <h1 className="page-card-title">{title}</h1>
+        {slug ? <p className="helper-text">slug: {slug}</p> : null}
 
-        <div className="inline-stack">
+        <div className="inline-stack align-center">
           <select value={status} onChange={(event) => setStatus(event.target.value)}>
             <option value="">Any status</option>
             <option value="completed">Completed</option>
@@ -141,61 +141,59 @@ export function SubmissionsDashboard({ formId }: { formId: string }) {
           <a
             href={`/api/forms/${formId}/submissions/export.csv`}
             className="button-secondary"
-            style={{ textDecoration: "none" }}
           >
             Export Wide CSV
           </a>
           <a
             href={`/api/forms/${formId}/submissions/export.csv?mode=facts`}
             className="button-secondary"
-            style={{ textDecoration: "none" }}
           >
             Export Facts CSV
           </a>
         </div>
       </section>
 
-      <section className="card" style={{ padding: "1rem" }}>
-        {loading ? <p style={{ margin: 0 }}>Loading submissions...</p> : null}
-        {error ? <p style={{ margin: 0, color: "var(--danger)" }}>{error}</p> : null}
+      <section className="card page-card">
+        {loading ? <p className="state-text">Loading submissions...</p> : null}
+        {error ? <p className="state-text error">{error}</p> : null}
 
         {!loading && submissions ? (
           <>
-            <p style={{ marginTop: 0, marginBottom: "0.8rem", color: "var(--text-muted)" }}>
+            <p className="helper-text">
               {submissions.total} total submissions
             </p>
 
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <div className="table-shell">
+              <table className="data-table">
                 <thead>
                   <tr>
-                    <th align="left">Submission</th>
-                    <th align="left">Status</th>
-                    <th align="left">Version</th>
-                    <th align="left">Started</th>
-                    <th align="left">Completed</th>
-                    <th align="left">Branch Trace</th>
-                    <th align="left">Source</th>
+                    <th>Submission</th>
+                    <th>Status</th>
+                    <th>Version</th>
+                    <th>Started</th>
+                    <th>Completed</th>
+                    <th>Branch Trace</th>
+                    <th>Source</th>
                   </tr>
                 </thead>
                 <tbody>
                   {submissions.items.map((row) => (
-                    <tr key={row.submissionId} style={{ borderTop: "1px solid var(--border)" }}>
-                      <td style={{ padding: "0.5rem 0.3rem" }}>
+                    <tr key={row.submissionId}>
+                      <td>
                         <code>{row.submissionId}</code>
                       </td>
-                      <td style={{ padding: "0.5rem 0.3rem" }}>{row.status}</td>
-                      <td style={{ padding: "0.5rem 0.3rem" }}>v{row.versionNumber}</td>
-                      <td style={{ padding: "0.5rem 0.3rem" }}>
+                      <td>{row.status}</td>
+                      <td>v{row.versionNumber}</td>
+                      <td>
                         {new Date(row.startedAt).toLocaleString()}
                       </td>
-                      <td style={{ padding: "0.5rem 0.3rem" }}>
+                      <td>
                         {row.completedAt ? new Date(row.completedAt).toLocaleString() : "-"}
                       </td>
-                      <td style={{ padding: "0.5rem 0.3rem" }}>
+                      <td>
                         {row.branchTrace.length ? row.branchTrace.join(" > ") : "-"}
                       </td>
-                      <td style={{ padding: "0.5rem 0.3rem" }}>{row.source}</td>
+                      <td>{row.source}</td>
                     </tr>
                   ))}
                 </tbody>

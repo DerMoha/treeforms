@@ -15,12 +15,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        style={{
-          fontFamily:
-            '"Avenir Next", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif'
-        }}
-      >
+      <body>
         <div className="app-shell">{children}</div>
       </body>
     </html>

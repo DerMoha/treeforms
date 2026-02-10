@@ -82,15 +82,15 @@ export function BuilderHome() {
   }
 
   return (
-    <main className="container" style={{ display: "grid", gap: "1rem" }}>
-      <section className="card" style={{ padding: "1.4rem", display: "grid", gap: "1rem" }}>
+    <main className="container page-stack">
+      <section className="card page-card">
         <span className="badge">Builder</span>
-        <h1 style={{ margin: 0, fontSize: "1.8rem" }}>Forms</h1>
-        <p style={{ margin: 0, color: "var(--text-muted)" }}>
+        <h1 className="page-card-title">Forms</h1>
+        <p className="page-card-subtitle">
           Create a form, edit branch paths, publish immutable versions, and collect responses.
         </p>
 
-        <div className="inline-stack" style={{ alignItems: "center" }}>
+        <div className="inline-stack align-center">
           <input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
@@ -107,37 +107,31 @@ export function BuilderHome() {
           </button>
         </div>
 
-        {error ? <p style={{ margin: 0, color: "var(--danger)" }}>{error}</p> : null}
+        {error ? <p className="state-text error">{error}</p> : null}
       </section>
 
-      <section className="card" style={{ padding: "1.2rem" }}>
-        <h2 style={{ marginTop: 0, marginBottom: "0.8rem" }}>Existing forms</h2>
+      <section className="card page-card">
+        <h2 className="section-title">Existing forms</h2>
 
-        {loading ? <p>Loading forms...</p> : null}
+        {loading ? <p className="state-text">Loading forms...</p> : null}
 
         {!loading && sortedForms.length === 0 ? (
-          <p style={{ margin: 0, color: "var(--text-muted)" }}>
+          <p className="helper-text">
             No forms yet. Create your first branch-aware form.
           </p>
         ) : null}
 
-        <div style={{ display: "grid", gap: "0.7rem" }}>
+        <div className="list-stack">
           {sortedForms.map((form) => (
             <article
               key={form.formId}
-              className="card"
-              style={{
-                padding: "0.9rem",
-                background: "var(--surface-strong)",
-                display: "grid",
-                gap: "0.35rem"
-              }}
+              className="card muted-card"
             >
               <strong>{form.title}</strong>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "0.84rem", color: "#38524f" }}>
+              <span className="mono-text">
                 slug: {form.slug}
               </span>
-              <span style={{ color: "var(--text-muted)", fontSize: "0.86rem" }}>
+              <span className="helper-text">
                 Updated {new Date(form.updatedAt).toLocaleString()}
               </span>
 
@@ -145,14 +139,12 @@ export function BuilderHome() {
                 <Link
                   href={`/builder/forms/${form.formId}`}
                   className="button-secondary"
-                  style={{ textDecoration: "none" }}
                 >
                   Open Builder
                 </Link>
                 <Link
                   href={`/builder/forms/${form.formId}/submissions`}
                   className="button-secondary"
-                  style={{ textDecoration: "none" }}
                 >
                   View Submissions
                 </Link>

@@ -251,8 +251,8 @@ export function FormBuilder({ formId }: Props) {
   if (loading || !schema) {
     return (
       <main className="container">
-        <section className="card" style={{ padding: "1.2rem" }}>
-          <p style={{ margin: 0 }}>Loading form builder...</p>
+        <section className="card page-card">
+          <p className="state-text">Loading form builder...</p>
         </section>
       </main>
     );
@@ -268,20 +268,20 @@ export function FormBuilder({ formId }: Props) {
     : null;
 
   return (
-    <main className="container" style={{ display: "grid", gap: "1rem" }}>
-      <section className="card" style={{ padding: "1.1rem", display: "grid", gap: "0.8rem" }}>
-        <div style={{ display: "flex", gap: "0.7rem", alignItems: "center", flexWrap: "wrap" }}>
-          <Link href="/builder" className="button-secondary" style={{ textDecoration: "none" }}>
+    <main className="container page-stack">
+      <section className="card page-card">
+        <div className="inline-stack align-center">
+          <Link href="/builder" className="button-secondary">
             Back
           </Link>
           <span className="badge">Form Builder</span>
-          <span style={{ fontFamily: "var(--font-mono)", color: "#496463", fontSize: "0.82rem" }}>
+          <span className="mono-text">
             {formId}
           </span>
         </div>
 
-        <label style={{ display: "grid", gap: "0.35rem", maxWidth: 650 }}>
-          <span style={{ fontWeight: 600 }}>Form title</span>
+        <label className="field" style={{ maxWidth: 650 }}>
+          <span className="field-label">Form title</span>
           <input
             value={schema.title}
             onChange={(event) => mutateSchema((current) => ({ ...current, title: event.target.value }))}
@@ -304,29 +304,28 @@ export function FormBuilder({ formId }: Props) {
           <Link
             className="button-secondary"
             href={`/builder/forms/${formId}/submissions`}
-            style={{ textDecoration: "none" }}
           >
             Submissions
           </Link>
 
           {publishedLink ? (
-            <Link className="button-secondary" href={publishedLink} style={{ textDecoration: "none" }}>
+            <Link className="button-secondary" href={publishedLink}>
               Open Latest Runtime
             </Link>
           ) : null}
         </div>
 
-        <div className="inline-stack" style={{ alignItems: "center" }}>
-          <span style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
+        <div className="inline-stack align-center">
+          <span className="helper-text">
             Slug: <strong>{slug}</strong>
           </span>
           {latestVersion ? <span className="badge">latest v{latestVersion.versionNumber}</span> : null}
-          {toast ? <span style={{ color: "#0d6a62", fontWeight: 600 }}>{toast}</span> : null}
+          {toast ? <span className="state-text success">{toast}</span> : null}
         </div>
 
         {errors.length > 0 ? (
-          <div style={{ border: "1px solid #efc5b3", background: "#fff3ee", borderRadius: 10, padding: "0.75rem" }}>
-            <strong style={{ display: "block", marginBottom: "0.4rem" }}>Validation issues</strong>
+          <div className="notice-error">
+            <strong>Validation issues</strong>
             <ul style={{ margin: 0, paddingLeft: "1rem" }}>
               {errors.map((error) => (
                 <li key={error}>{error}</li>
@@ -343,18 +342,18 @@ export function FormBuilder({ formId }: Props) {
           onSelectPath={selectPath}
         />
 
-        <section style={{ display: "grid", gap: "1rem", alignContent: "start" }}>
+        <section className="flow-card-shell">
           <section className="card flow-context-bar">
-            <div style={{ display: "grid", gap: "0.45rem" }}>
+            <div className="field">
               <span className="badge">You are here</span>
-              <h3 style={{ margin: 0, fontSize: "1.05rem" }}>
+              <h3 className="flow-card-title">
                 {activeOutlineNode?.title ?? "Main flow"}
               </h3>
-              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "0.92rem" }}>
+              <p className="helper-text">
                 Path: <strong>{breadcrumbText}</strong>
               </p>
               {returnsTo ? (
-                <p style={{ margin: 0, color: "#37635d", fontWeight: 600, fontSize: "0.92rem" }}>
+                <p className="state-text success">
                   Returns to: {returnsTo}
                 </p>
               ) : null}
@@ -397,9 +396,9 @@ function FlowOutlineSidebar({ schema, activePath, onSelectPath }: FlowOutlineSid
   return (
     <aside className="card flow-outline-card">
       <div className="flow-outline-sticky">
-        <div style={{ display: "grid", gap: "0.4rem" }}>
-          <h3 style={{ margin: 0, fontSize: "1rem" }}>Flow Outline</h3>
-          <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "0.86rem" }}>
+        <div className="field">
+          <h3 className="section-title">Flow Outline</h3>
+          <p className="helper-text">
             Jump across main and branch flows without losing context.
           </p>
         </div>
@@ -418,7 +417,7 @@ function FlowOutlineSidebar({ schema, activePath, onSelectPath }: FlowOutlineSid
 
         <div className="flow-outline-list">
           {branchNodes.length === 0 ? (
-            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "0.86rem" }}>
+            <p className="helper-text">
               No follow-up flows yet.
             </p>
           ) : (
@@ -541,9 +540,9 @@ function FlowEditor({
   }
 
   return (
-    <section className="card" style={{ padding: "1rem", display: "grid", gap: "0.8rem" }}>
-      <header style={{ display: "flex", justifyContent: "space-between", gap: "0.8rem", alignItems: "center" }}>
-        <h3 style={{ margin: 0 }}>{title}</h3>
+    <section className="card page-card">
+      <header className="flow-card-header">
+        <h3 className="flow-card-title">{title}</h3>
         <div className="inline-stack">
           <button type="button" className="button-secondary" onClick={() => addQuestion("radio")}>
             + Radio
@@ -584,10 +583,10 @@ function FlowEditor({
       ) : null}
 
       {flow.questions.length === 0 ? (
-        <p style={{ margin: 0, color: "var(--text-muted)" }}>No questions yet in this flow.</p>
+        <p className="helper-text">No questions yet in this flow.</p>
       ) : null}
 
-      <div style={{ display: "grid", gap: "0.9rem" }}>
+      <div className="page-stack">
         {flow.questions.map((question, index) => {
           const isFocused = focusedQuestionId === question.questionId;
 
@@ -598,11 +597,10 @@ function FlowEditor({
                 questionRefs.current[question.questionId] = element;
               }}
               tabIndex={-1}
-              className={`card builder-question-card${isFocused ? " is-focused" : ""}`}
-              style={{ padding: "0.9rem", display: "grid", gap: "0.65rem" }}
+              className={`card builder-question-card question-card-shell${isFocused ? " is-focused" : ""}`}
               onClick={() => onFocusQuestion(question.questionId)}
             >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: "0.8rem", alignItems: "center" }}>
+              <div className="flow-card-header">
                 <span className="badge">Q{index + 1}</span>
                 <div className="inline-stack">
                   <button
@@ -631,8 +629,8 @@ function FlowEditor({
                 </div>
               </div>
 
-              <label style={{ display: "grid", gap: "0.35rem" }}>
-                <span style={{ fontWeight: 600 }}>Label</span>
+              <label className="field">
+                <span className="field-label">Label</span>
                 <input
                   value={question.label}
                   onChange={(event) =>
@@ -644,9 +642,9 @@ function FlowEditor({
                 />
               </label>
 
-              <div className="inline-stack" style={{ alignItems: "center" }}>
-                <label style={{ display: "grid", gap: "0.2rem" }}>
-                  <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Type</span>
+              <div className="inline-stack align-center">
+                <label className="flow-type-label">
+                  <span className="field-label">Type</span>
                   <select
                     value={question.type}
                     onChange={(event) =>
@@ -662,7 +660,7 @@ function FlowEditor({
                   </select>
                 </label>
 
-                <label style={{ display: "flex", alignItems: "center", gap: "0.45rem", paddingTop: "1rem" }}>
+                <label className="required-toggle">
                   <input
                     type="checkbox"
                     checked={question.required}
@@ -752,9 +750,9 @@ function FlowEditor({
               ) : null}
 
               {(question.type === "radio" || question.type === "checkbox") && question.options ? (
-                <div style={{ display: "grid", gap: "0.5rem", borderTop: "1px dashed #cad7d5", paddingTop: "0.6rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <strong style={{ fontSize: "0.92rem" }}>Options & Branches</strong>
+                <div className="option-editor">
+                  <div className="option-editor-head">
+                    <strong className="field-label">Options & Branches</strong>
                     <button
                       type="button"
                       className="button-secondary"
@@ -773,17 +771,8 @@ function FlowEditor({
                     const followUpCount = option.branch?.questions.length ?? 0;
 
                     return (
-                      <article
-                        key={option.optionId}
-                        className="card"
-                        style={{
-                          padding: "0.7rem",
-                          background: "#f9fbfa",
-                          display: "grid",
-                          gap: "0.5rem"
-                        }}
-                      >
-                        <div className="inline-stack" style={{ alignItems: "center" }}>
+                      <article key={option.optionId} className="card option-card">
+                        <div className="inline-stack align-center">
                           <input
                             placeholder="Option label"
                             value={option.label}

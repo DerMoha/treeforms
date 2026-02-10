@@ -241,8 +241,8 @@ export function PublicFormRunner({ slug, version, resumeTokenFromQuery }: Props)
   if (loading) {
     return (
       <main className="container">
-        <section className="card" style={{ padding: "1.2rem" }}>
-          <p>Loading form...</p>
+        <section className="card page-card">
+          <p className="state-text">Loading form...</p>
         </section>
       </main>
     );
@@ -251,8 +251,8 @@ export function PublicFormRunner({ slug, version, resumeTokenFromQuery }: Props)
   if (!runtime) {
     return (
       <main className="container">
-        <section className="card" style={{ padding: "1.2rem" }}>
-          <p style={{ color: "var(--danger)" }}>{error ?? "Could not load this form"}</p>
+        <section className="card page-card">
+          <p className="state-text error">{error ?? "Could not load this form"}</p>
         </section>
       </main>
     );
@@ -260,21 +260,21 @@ export function PublicFormRunner({ slug, version, resumeTokenFromQuery }: Props)
 
   const current = runtime.currentQuestion;
   return (
-    <main className="container" style={{ display: "grid", gap: "1rem" }}>
-      <section className="card" style={{ padding: "1.2rem", display: "grid", gap: "0.8rem" }}>
+    <main className="container page-stack">
+      <section className="card page-card">
         <span className="badge">Hosted Runtime</span>
-        <h1 style={{ margin: 0 }}>{title}</h1>
-        <p style={{ margin: 0, color: "var(--text-muted)" }}>{progressText}</p>
-        <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: "0.83rem", color: "#486664" }}>
+        <h1 className="page-card-title">{title}</h1>
+        <p className="helper-text">{progressText}</p>
+        <p className="mono-text">
           Resume link: <a href={resumeHref}>{resumeHref}</a>
         </p>
       </section>
 
-      <section className="card" style={{ padding: "1.2rem", display: "grid", gap: "0.85rem" }}>
+      <section className="card page-card">
         {current ? (
           <>
-            <h2 style={{ margin: 0 }}>{current.question.label || "Untitled question"}</h2>
-            <span style={{ color: "var(--text-muted)", fontSize: "0.86rem" }}>
+            <h2 className="section-title">{current.question.label || "Untitled question"}</h2>
+            <span className="helper-text">
               Question {current.index + 1} of {runtime.totalCount}
             </span>
 
@@ -301,8 +301,8 @@ export function PublicFormRunner({ slug, version, resumeTokenFromQuery }: Props)
           </>
         ) : runtime.status !== "completed" ? (
           <>
-            <h2 style={{ margin: 0 }}>Ready to submit</h2>
-            <p style={{ margin: 0, color: "var(--text-muted)" }}>
+            <h2 className="section-title">Ready to submit</h2>
+            <p className="helper-text">
               You answered all currently reachable questions.
             </p>
             <div className="inline-stack">
@@ -326,20 +326,20 @@ export function PublicFormRunner({ slug, version, resumeTokenFromQuery }: Props)
           </>
         ) : (
           <>
-            <h2 style={{ margin: 0 }}>Thanks, submission received</h2>
-            <p style={{ margin: 0, color: "var(--text-muted)" }}>
+            <h2 className="section-title">Thanks, submission received</h2>
+            <p className="helper-text">
               Submission ID: <strong>{finishedSubmissionId ?? `sub_${runtime.sessionToken}`}</strong>
             </p>
-            <Link href="/builder" className="button-secondary" style={{ textDecoration: "none" }}>
+            <Link href="/builder" className="button-secondary">
               Back to Builder
             </Link>
           </>
         )}
 
-        {error ? <p style={{ margin: 0, color: "var(--danger)" }}>{error}</p> : null}
+        {error ? <p className="state-text error">{error}</p> : null}
 
         {runtime.branchTrace.length > 0 ? (
-          <p style={{ margin: 0, color: "#3e625d", fontSize: "0.84rem" }}>
+          <p className="helper-text">
             Branch path: {runtime.branchTrace.join(" > ")}
           </p>
         ) : null}
@@ -359,9 +359,9 @@ function QuestionInput({
 }) {
   if (question.type === "radio") {
     return (
-      <div style={{ display: "grid", gap: "0.5rem" }}>
+      <div className="choice-list">
         {(question.options ?? []).map((option) => (
-          <label key={option.optionId} style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
+          <label key={option.optionId} className="choice-item">
             <input
               type="radio"
               name={question.questionId}
@@ -378,11 +378,11 @@ function QuestionInput({
   if (question.type === "checkbox") {
     const values = Array.isArray(value) ? value : [];
     return (
-      <div style={{ display: "grid", gap: "0.5rem" }}>
+      <div className="choice-list">
         {(question.options ?? []).map((option) => {
           const selected = values.includes(option.value);
           return (
-            <label key={option.optionId} style={{ display: "flex", gap: "0.45rem", alignItems: "center" }}>
+            <label key={option.optionId} className="choice-item">
               <input
                 type="checkbox"
                 checked={selected}
