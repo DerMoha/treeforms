@@ -19,7 +19,8 @@ Treeforms is a branch-first form builder built with Next.js + TypeScript.
 
 - Next.js App Router
 - TypeScript
-- MariaDB/MySQL via `mysql2`
+- MariaDB/MySQL via `mysql2` (production/external targets)
+- Local SQLite fallback via `better-sqlite3` (dev/no MySQL)
 - Vitest for core engine/schema tests
 
 ## Environment variables
@@ -27,6 +28,7 @@ Treeforms is a branch-first form builder built with Next.js + TypeScript.
 ```bash
 APP_DATABASE_URL=mysql://user:password@host:3306/treeforms_app
 SUBMISSION_DATABASE_URL=mysql://user:password@host:3306/treeforms_submissions
+LOCAL_SQLITE_PATH=.data/treeforms-local.sqlite
 DEFAULT_WORKSPACE_ID=workspace_demo
 DEFAULT_WORKSPACE_NAME=Demo Workspace
 CREDENTIAL_ENCRYPTION_KEY=replace-with-32-plus-char-secret
@@ -34,7 +36,11 @@ CREDENTIAL_ENCRYPTION_KEY=replace-with-32-plus-char-secret
 
 `SUBMISSION_DATABASE_URL` is optional; it falls back to `APP_DATABASE_URL`.
 
-If `APP_DATABASE_URL` is not set, Treeforms now runs in an in-memory dev mode for forms/drafts/versions/sessions so local builder flows can be tested without a database. Submission export/persistence will also stay in-memory unless a submission DB is configured.
+`LOCAL_SQLITE_PATH` is optional and defaults to `.data/treeforms-local.sqlite`.
+
+If `APP_DATABASE_URL` is not set, Treeforms now persists local app state (forms/drafts/versions/sessions) to SQLite so builder data survives server restarts. Set `LOCAL_SQLITE_DISABLED=1` to fall back to pure in-memory mode.
+
+Submission export/persistence uses the same local persisted fallback when neither `SUBMISSION_DATABASE_URL` nor `APP_DATABASE_URL` is configured.
 
 ## Run
 
@@ -54,8 +60,11 @@ Implemented endpoints:
 
 - `POST /api/forms`
 - `GET /api/forms`
+- `POST /api/forms/import`
 - `GET /api/forms/:formId`
 - `PUT /api/forms/:formId/draft`
+- `POST /api/forms/:formId/draft/import`
+- `GET /api/forms/:formId/draft/export.json`
 - `POST /api/forms/:formId/publish`
 - `GET /api/forms/:formId/versions`
 - `GET /api/forms/:formId/submissions`
@@ -66,6 +75,44 @@ Implemented endpoints:
 - `POST /api/public/sessions/:sessionToken/complete`
 - `POST /api/workspaces/:workspaceId/db-target/test`
 - `PUT /api/workspaces/:workspaceId/db-target`
+
+## Form JSON import/export
+
+Treeforms supports importing and exporting full form drafts as raw JSON `FormSchema` objects.
+
+- Export current draft: `GET /api/forms/:formId/draft/export.json`
+- Replace current draft from JSON: `POST /api/forms/:formId/draft/import`
+- Create a new form from JSON: `POST /api/forms/import`
+
+Expected JSON shape:
+
+```json
+{
+  "schemaVersion": 1,
+  "formId": "form_xxx",
+  "title": "Customer Intake",
+  "mainFlow": {
+    "flowId": "flow_main",
+    "questions": [
+      {
+        "questionId": "q1",
+        "type": "radio",
+        "label": "What do you need help with?",
+        "required": true,
+        "options": [
+          {
+            "optionId": "opt_a",
+            "label": "Onboarding",
+            "value": "Onboarding"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Import applies light normalization for AI-generated payloads (missing ids, blank title, missing option values), then runs schema validation.
 
 ## Notes
 

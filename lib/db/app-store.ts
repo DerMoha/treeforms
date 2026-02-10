@@ -1,6 +1,7 @@
 import { type PoolConnection, type RowDataPacket } from "mysql2/promise";
 
 import { makeId, slugify } from "@/lib/ids";
+import { readLocalJson, writeLocalJson } from "@/lib/db/local-sqlite";
 import { createEmptySchema, validateSchema } from "@/lib/schema";
 import {
   ensureAppTables,
@@ -75,6 +76,19 @@ interface MemoryState {
   auditEvents: MemoryAuditEvent[];
 }
 
+interface SerializedMemoryState {
+  workspaces: Array<[string, { id: string; name: string; createdAt: string }]>;
+  forms: Array<[string, FormRecord]>;
+  drafts: Array<[string, DraftRecord]>;
+  versions: Array<[string, FormVersionRecord[]]>;
+  sessions: Array<[string, SessionState]>;
+  sessionByResumeToken: Array<[string, string]>;
+  dbTargets: Array<[string, DbTargetConfig[]]>;
+  auditEvents: MemoryAuditEvent[];
+}
+
+const APP_STORE_STATE_KEY = "treeforms.app-store.v1";
+
 declare global {
   // eslint-disable-next-line no-var
   var __TREEFORMS_MEMORY_STATE: MemoryState | undefined;
@@ -94,6 +108,10 @@ const memoryState: MemoryState =
 
 globalThis.__TREEFORMS_MEMORY_STATE = memoryState;
 
+if (!isAppDbConfigured()) {
+  hydrateMemoryStateFromDisk();
+}
+
 export async function initializeWorkspace(workspaceId = DEFAULT_WORKSPACE_ID) {
   if (!isAppDbConfigured()) {
     const existing = memoryState.workspaces.get(workspaceId);
@@ -104,6 +122,7 @@ export async function initializeWorkspace(workspaceId = DEFAULT_WORKSPACE_ID) {
         name: DEFAULT_WORKSPACE_NAME,
         createdAt: nowIso()
       });
+      persistMemoryStateToDisk();
     }
 
     return;
@@ -623,6 +642,7 @@ export async function createSession(data: {
 
     memoryState.sessions.set(sessionToken, session);
     memoryState.sessionByResumeToken.set(resumeToken, sessionToken);
+    persistMemoryStateToDisk();
 
     return {
       sessionToken,
@@ -767,6 +787,7 @@ export async function updateSessionState(data: {
     };
 
     memoryState.sessions.set(data.sessionToken, updated);
+    persistMemoryStateToDisk();
     return;
   }
 
@@ -803,6 +824,7 @@ export async function markSessionCompleted(sessionToken: string) {
       currentQuestionId: null,
       updatedAt: nowIso()
     });
+    persistMemoryStateToDisk();
 
     return;
   }
@@ -1080,6 +1102,7 @@ async function writeAuditEvent(
       payloadJson: JSON.stringify(payload),
       createdAt: nowIso()
     });
+    persistMemoryStateToDisk();
     return;
   }
 
@@ -1150,4 +1173,41 @@ function uniqueSlug(workspaceId: string, baseSlug: string) {
   }
 
   return next;
+}
+
+function hydrateMemoryStateFromDisk() {
+  const stored = readLocalJson<Partial<SerializedMemoryState>>(APP_STORE_STATE_KEY);
+  if (!stored) {
+    return;
+  }
+
+  try {
+    memoryState.workspaces = new Map(stored.workspaces ?? []);
+    memoryState.forms = new Map(stored.forms ?? []);
+    memoryState.drafts = new Map(stored.drafts ?? []);
+    memoryState.versions = new Map(stored.versions ?? []);
+    memoryState.sessions = new Map(stored.sessions ?? []);
+    memoryState.sessionByResumeToken = new Map(stored.sessionByResumeToken ?? []);
+    memoryState.dbTargets = new Map(stored.dbTargets ?? []);
+    memoryState.auditEvents = Array.isArray(stored.auditEvents) ? stored.auditEvents : [];
+  } catch {
+    // Keep defaults if persisted data is malformed.
+  }
+}
+
+function persistMemoryStateToDisk() {
+  writeLocalJson(APP_STORE_STATE_KEY, serializeMemoryState());
+}
+
+function serializeMemoryState(): SerializedMemoryState {
+  return {
+    workspaces: Array.from(memoryState.workspaces.entries()),
+    forms: Array.from(memoryState.forms.entries()),
+    drafts: Array.from(memoryState.drafts.entries()),
+    versions: Array.from(memoryState.versions.entries()),
+    sessions: Array.from(memoryState.sessions.entries()),
+    sessionByResumeToken: Array.from(memoryState.sessionByResumeToken.entries()),
+    dbTargets: Array.from(memoryState.dbTargets.entries()),
+    auditEvents: [...memoryState.auditEvents]
+  };
 }

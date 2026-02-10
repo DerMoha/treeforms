@@ -12,11 +12,18 @@ interface RuntimePayload {
   currentQuestion: {
     question: QuestionNode;
     flowPath: string[];
+    flowBreadcrumbs: Array<{
+      questionId: string;
+      questionLabel: string;
+      optionId: string;
+      optionLabel: string;
+    }>;
     index: number;
   } | null;
   answeredCount: number;
   totalCount: number;
   branchTrace: string[];
+  branchTraceLabels?: string[];
   answers: Record<string, StoredAnswer>;
 }
 
@@ -259,6 +266,11 @@ export function PublicFormRunner({ slug, version, resumeTokenFromQuery }: Props)
   }
 
   const current = runtime.currentQuestion;
+  const branchPathDisplay =
+    runtime.branchTraceLabels && runtime.branchTraceLabels.length > 0
+      ? runtime.branchTraceLabels
+      : runtime.branchTrace;
+
   return (
     <main className="container page-stack">
       <section className="card page-card">
@@ -277,6 +289,16 @@ export function PublicFormRunner({ slug, version, resumeTokenFromQuery }: Props)
             <span className="helper-text">
               Question {current.index + 1} of {runtime.totalCount}
             </span>
+            {current.flowBreadcrumbs.length > 0 ? (
+              <div className="runtime-breadcrumbs">
+                <span className="badge">Follow-up Context</span>
+                <p className="helper-text runtime-breadcrumbs-text">
+                  {current.flowBreadcrumbs
+                    .map((entry) => `${entry.questionLabel} -> ${entry.optionLabel}`)
+                    .join(" > ")}
+                </p>
+              </div>
+            ) : null}
 
             <QuestionInput question={current.question} value={draft} onChange={setDraft} />
 
@@ -338,9 +360,9 @@ export function PublicFormRunner({ slug, version, resumeTokenFromQuery }: Props)
 
         {error ? <p className="state-text error">{error}</p> : null}
 
-        {runtime.branchTrace.length > 0 ? (
+        {branchPathDisplay.length > 0 ? (
           <p className="helper-text">
-            Branch path: {runtime.branchTrace.join(" > ")}
+            Current path: {branchPathDisplay.join(" > ")}
           </p>
         ) : null}
       </section>

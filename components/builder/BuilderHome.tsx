@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 interface FormSummary {
   formId: string;
@@ -15,7 +15,9 @@ export function BuilderHome() {
   const [title, setTitle] = useState("New Branching Form");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
 
   const sortedForms = useMemo(
     () => [...forms].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)),
@@ -81,6 +83,58 @@ export function BuilderHome() {
     }
   }
 
+  function openImportDialog() {
+    importInputRef.current?.click();
+  }
+
+  async function handleImportForm(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    setImporting(true);
+    setError(null);
+
+    try {
+      const rawContent = await file.text();
+      let parsed: unknown;
+
+      try {
+        parsed = JSON.parse(rawContent) as unknown;
+      } catch {
+        setError("Selected file is not valid JSON");
+        return;
+      }
+
+      const response = await fetch("/api/forms/import", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(parsed)
+      });
+
+      const payload = (await response.json()) as {
+        form?: FormSummary;
+        error?: string;
+        details?: string[];
+      };
+
+      if (!response.ok || !payload.form) {
+        throw new Error(payload.details?.[0] ?? payload.error ?? "Unable to import form");
+      }
+
+      window.location.href = `/builder/forms/${payload.form.formId}`;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to import form");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <main className="container page-stack">
       <section className="card page-card">
@@ -105,9 +159,24 @@ export function BuilderHome() {
           >
             {saving ? "Creating..." : "Create Form"}
           </button>
+          <button
+            type="button"
+            className="button-secondary"
+            disabled={importing}
+            onClick={openImportDialog}
+          >
+            {importing ? "Importing..." : "Import Form JSON"}
+          </button>
         </div>
 
         {error ? <p className="state-text error">{error}</p> : null}
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: "none" }}
+          onChange={handleImportForm}
+        />
       </section>
 
       <section className="card page-card">

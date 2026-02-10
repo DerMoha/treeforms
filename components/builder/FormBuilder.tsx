@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import {
+  type ChangeEvent,
   type Dispatch,
   type SetStateAction,
   useCallback,
@@ -11,6 +12,7 @@ import {
   useState
 } from "react";
 
+import { FlowMinimapOverlay } from "@/components/builder/FlowMinimapOverlay";
 import { buildFlowOutline, pathKey } from "@/lib/builder-outline";
 import {
   type BranchPathSegment,
@@ -45,6 +47,10 @@ interface Props {
   formId: string;
 }
 
+interface SelectPathOptions {
+  scrollToFlowTop?: boolean;
+}
+
 export function FormBuilder({ formId }: Props) {
   const [schema, setSchema] = useState<FormSchema | null>(null);
   const [slug, setSlug] = useState("");
@@ -54,8 +60,13 @@ export function FormBuilder({ formId }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const flowCardShellRef = useRef<HTMLElement | null>(null);
+  const [scrollToFlowTopToken, setScrollToFlowTopToken] = useState(0);
 
   const latestVersion = useMemo(
     () => [...versions].sort((a, b) => b.versionNumber - a.versionNumber)[0] ?? null,
@@ -160,6 +171,26 @@ export function FormBuilder({ formId }: Props) {
     }
   }, [activeFlow, focusedQuestionId]);
 
+  useEffect(() => {
+    if (scrollToFlowTopToken === 0) {
+      return;
+    }
+
+    const flowCardShell = flowCardShellRef.current;
+    if (!flowCardShell) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      flowCardShell.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activePathId, scrollToFlowTopToken]);
+
   async function saveDraft() {
     if (!schema) {
       return;
@@ -167,6 +198,7 @@ export function FormBuilder({ formId }: Props) {
 
     setSaving(true);
     setErrors([]);
+    setWarnings([]);
 
     try {
       const response = await fetch(`/api/forms/${formId}/draft`, {
@@ -197,6 +229,7 @@ export function FormBuilder({ formId }: Props) {
   async function publish() {
     setPublishing(true);
     setErrors([]);
+    setWarnings([]);
 
     try {
       const response = await fetch(`/api/forms/${formId}/publish`, {
@@ -224,6 +257,69 @@ export function FormBuilder({ formId }: Props) {
     }
   }
 
+  function openImportDialog() {
+    importInputRef.current?.click();
+  }
+
+  async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    if (!window.confirm("Importing JSON will replace this form's current draft. Continue?")) {
+      return;
+    }
+
+    setImporting(true);
+    setErrors([]);
+
+    try {
+      const rawContent = await file.text();
+      let parsed: unknown;
+
+      try {
+        parsed = JSON.parse(rawContent) as unknown;
+      } catch {
+        setWarnings([]);
+        setErrors(["Selected file is not valid JSON"]);
+        return;
+      }
+
+      const response = await fetch(`/api/forms/${formId}/draft/import`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(parsed)
+      });
+
+      const payload = (await response.json()) as {
+        error?: string;
+        details?: string[];
+        warnings?: string[];
+      };
+
+      if (!response.ok) {
+        setWarnings([]);
+        setErrors(payload.details ?? [payload.error ?? "Unable to import form JSON"]);
+        return;
+      }
+
+      setWarnings(payload.warnings ?? []);
+      setToast("Form JSON imported");
+      setTimeout(() => setToast(null), 2600);
+      await loadForm();
+    } catch (reason) {
+      setWarnings([]);
+      setErrors([reason instanceof Error ? reason.message : "Unable to import form JSON"]);
+    } finally {
+      setImporting(false);
+    }
+  }
+
   function mutateSchema(mutator: (current: FormSchema) => FormSchema) {
     setSchema((current) => {
       if (!current) {
@@ -233,9 +329,13 @@ export function FormBuilder({ formId }: Props) {
     });
   }
 
-  function selectPath(path: BranchPathSegment[]) {
+  function selectPath(path: BranchPathSegment[], options: SelectPathOptions = {}) {
     setActivePath(path.map((segment) => ({ ...segment })));
     setFocusedQuestionId(null);
+
+    if (options.scrollToFlowTop) {
+      setScrollToFlowTopToken((current) => current + 1);
+    }
   }
 
   function openBranch(path: BranchPathSegment[]) {
@@ -300,6 +400,17 @@ export function FormBuilder({ formId }: Props) {
           >
             {publishing ? "Publishing..." : "Publish Version"}
           </button>
+          <a className="button-secondary" href={`/api/forms/${formId}/draft/export.json`}>
+            Export JSON
+          </a>
+          <button
+            type="button"
+            className="button-secondary"
+            disabled={importing}
+            onClick={openImportDialog}
+          >
+            {importing ? "Importing..." : "Import JSON"}
+          </button>
 
           <Link
             className="button-secondary"
@@ -333,6 +444,25 @@ export function FormBuilder({ formId }: Props) {
             </ul>
           </div>
         ) : null}
+
+        {warnings.length > 0 ? (
+          <div className="notice-warn">
+            <strong>Import notes</strong>
+            <ul style={{ margin: 0, paddingLeft: "1rem" }}>
+              {warnings.map((warning, index) => (
+                <li key={`${warning}-${index}`}>{warning}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: "none" }}
+          onChange={handleImportFile}
+        />
       </section>
 
       <section className="builder-layout">
@@ -342,7 +472,12 @@ export function FormBuilder({ formId }: Props) {
           onSelectPath={selectPath}
         />
 
-        <section className="flow-card-shell">
+        <section
+          className="flow-card-shell"
+          ref={(element) => {
+            flowCardShellRef.current = element;
+          }}
+        >
           <section className="card flow-context-bar">
             <div className="field">
               <span className="badge">You are here</span>
@@ -377,6 +512,12 @@ export function FormBuilder({ formId }: Props) {
           />
         </section>
       </section>
+
+      <FlowMinimapOverlay
+        schema={schema}
+        activePath={activePath}
+        onSelectPath={selectPath}
+      />
     </main>
   );
 }
@@ -384,7 +525,7 @@ export function FormBuilder({ formId }: Props) {
 interface FlowOutlineSidebarProps {
   schema: FormSchema;
   activePath: BranchPathSegment[];
-  onSelectPath: (path: BranchPathSegment[]) => void;
+  onSelectPath: (path: BranchPathSegment[], options?: SelectPathOptions) => void;
 }
 
 function FlowOutlineSidebar({ schema, activePath, onSelectPath }: FlowOutlineSidebarProps) {
@@ -589,6 +730,23 @@ function FlowEditor({
       <div className="page-stack">
         {flow.questions.map((question, index) => {
           const isFocused = focusedQuestionId === question.questionId;
+          const label = question.label.trim() || `Question ${index + 1}`;
+          const optionCount = question.options?.length ?? 0;
+          const followUpCount =
+            question.options?.reduce((total, option) => total + (option.branch?.questions.length ?? 0), 0) ?? 0;
+          const summaryBits = [`${question.type} question`];
+
+          if (question.required) {
+            summaryBits.push("required");
+          }
+
+          if (optionCount > 0) {
+            summaryBits.push(`${optionCount} option${optionCount === 1 ? "" : "s"}`);
+          }
+
+          if (followUpCount > 0) {
+            summaryBits.push(`${followUpCount} follow-up${followUpCount === 1 ? "" : "s"}`);
+          }
 
           return (
             <article
@@ -597,11 +755,15 @@ function FlowEditor({
                 questionRefs.current[question.questionId] = element;
               }}
               tabIndex={-1}
-              className={`card builder-question-card question-card-shell${isFocused ? " is-focused" : ""}`}
-              onClick={() => onFocusQuestion(question.questionId)}
+              className={`card builder-question-card question-card-shell${isFocused ? " is-focused" : " is-collapsed"}`}
+              onClick={() => focusQuestion(question.questionId)}
             >
               <div className="flow-card-header">
                 <span className="badge">Q{index + 1}</span>
+                <div className="builder-question-head">
+                  <strong className="builder-question-title">{truncateLabel(label, 64)}</strong>
+                  <span className="helper-text">{summaryBits.join(" | ")}</span>
+                </div>
                 <div className="inline-stack">
                   <button
                     type="button"
@@ -629,228 +791,236 @@ function FlowEditor({
                 </div>
               </div>
 
-              <label className="field">
-                <span className="field-label">Label</span>
-                <input
-                  value={question.label}
-                  onChange={(event) =>
-                    mutateQuestion(question.questionId, (current) => ({
-                      ...current,
-                      label: event.target.value
-                    }))
-                  }
-                />
-              </label>
-
-              <div className="inline-stack align-center">
-                <label className="flow-type-label">
-                  <span className="field-label">Type</span>
-                  <select
-                    value={question.type}
-                    onChange={(event) =>
-                      mutateQuestion(question.questionId, (current) =>
-                        updateQuestionType(current, event.target.value as QuestionType)
-                      )
-                    }
-                  >
-                    <option value="radio">Radio</option>
-                    <option value="checkbox">Checkbox</option>
-                    <option value="text">Text</option>
-                    <option value="number">Number</option>
-                  </select>
-                </label>
-
-                <label className="required-toggle">
-                  <input
-                    type="checkbox"
-                    checked={question.required}
-                    onChange={(event) =>
-                      mutateQuestion(question.questionId, (current) => ({
-                        ...current,
-                        required: event.target.checked
-                      }))
-                    }
-                  />
-                  Required
-                </label>
-              </div>
-
-              {question.type === "text" ? (
-                <div className="inline-stack">
-                  <label>
-                    Min length
+              {isFocused ? (
+                <>
+                  <label className="field">
+                    <span className="field-label">Label</span>
                     <input
-                      type="number"
-                      value={question.validation?.minLen ?? ""}
+                      value={question.label}
                       onChange={(event) =>
                         mutateQuestion(question.questionId, (current) => ({
                           ...current,
-                          validation: {
-                            ...current.validation,
-                            minLen: event.target.value ? Number(event.target.value) : undefined
-                          }
+                          label: event.target.value
                         }))
                       }
                     />
                   </label>
-                  <label>
-                    Max length
-                    <input
-                      type="number"
-                      value={question.validation?.maxLen ?? ""}
-                      onChange={(event) =>
-                        mutateQuestion(question.questionId, (current) => ({
-                          ...current,
-                          validation: {
-                            ...current.validation,
-                            maxLen: event.target.value ? Number(event.target.value) : undefined
-                          }
-                        }))
-                      }
-                    />
-                  </label>
-                </div>
-              ) : null}
 
-              {question.type === "number" ? (
-                <div className="inline-stack">
-                  <label>
-                    Min value
-                    <input
-                      type="number"
-                      value={question.validation?.min ?? ""}
-                      onChange={(event) =>
-                        mutateQuestion(question.questionId, (current) => ({
-                          ...current,
-                          validation: {
-                            ...current.validation,
-                            min: event.target.value ? Number(event.target.value) : undefined
-                          }
-                        }))
-                      }
-                    />
-                  </label>
-                  <label>
-                    Max value
-                    <input
-                      type="number"
-                      value={question.validation?.max ?? ""}
-                      onChange={(event) =>
-                        mutateQuestion(question.questionId, (current) => ({
-                          ...current,
-                          validation: {
-                            ...current.validation,
-                            max: event.target.value ? Number(event.target.value) : undefined
-                          }
-                        }))
-                      }
-                    />
-                  </label>
-                </div>
-              ) : null}
+                  <div className="inline-stack align-center">
+                    <label className="flow-type-label">
+                      <span className="field-label">Type</span>
+                      <select
+                        value={question.type}
+                        onChange={(event) =>
+                          mutateQuestion(question.questionId, (current) =>
+                            updateQuestionType(current, event.target.value as QuestionType)
+                          )
+                        }
+                      >
+                        <option value="radio">Radio</option>
+                        <option value="checkbox">Checkbox</option>
+                        <option value="text">Text</option>
+                        <option value="number">Number</option>
+                      </select>
+                    </label>
 
-              {(question.type === "radio" || question.type === "checkbox") && question.options ? (
-                <div className="option-editor">
-                  <div className="option-editor-head">
-                    <strong className="field-label">Options & Branches</strong>
-                    <button
-                      type="button"
-                      className="button-secondary"
-                      onClick={() =>
-                        mutateQuestion(question.questionId, (current) => ({
-                          ...current,
-                          options: [...(current.options ?? []), makeOption()]
-                        }))
-                      }
-                    >
-                      + Option
-                    </button>
+                    <label className="required-toggle">
+                      <input
+                        type="checkbox"
+                        checked={question.required}
+                        onChange={(event) =>
+                          mutateQuestion(question.questionId, (current) => ({
+                            ...current,
+                            required: event.target.checked
+                          }))
+                        }
+                      />
+                      Required
+                    </label>
                   </div>
 
-                  {question.options.map((option) => {
-                    const followUpCount = option.branch?.questions.length ?? 0;
+                  {question.type === "text" ? (
+                    <div className="inline-stack">
+                      <label>
+                        Min length
+                        <input
+                          type="number"
+                          value={question.validation?.minLen ?? ""}
+                          onChange={(event) =>
+                            mutateQuestion(question.questionId, (current) => ({
+                              ...current,
+                              validation: {
+                                ...current.validation,
+                                minLen: event.target.value ? Number(event.target.value) : undefined
+                              }
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        Max length
+                        <input
+                          type="number"
+                          value={question.validation?.maxLen ?? ""}
+                          onChange={(event) =>
+                            mutateQuestion(question.questionId, (current) => ({
+                              ...current,
+                              validation: {
+                                ...current.validation,
+                                maxLen: event.target.value ? Number(event.target.value) : undefined
+                              }
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+                  ) : null}
 
-                    return (
-                      <article key={option.optionId} className="card option-card">
-                        <div className="inline-stack align-center">
-                          <input
-                            placeholder="Option label"
-                            value={option.label}
-                            onChange={(event) =>
-                              mutateQuestion(question.questionId, (current) => ({
-                                ...current,
-                                options: (current.options ?? []).map((entry) =>
-                                  entry.optionId === option.optionId
-                                    ? {
-                                        ...entry,
-                                        label: event.target.value
-                                      }
-                                    : entry
-                                )
-                              }))
-                            }
-                            style={{ flex: "1 1 200px" }}
-                          />
-                          <input
-                            placeholder="Option value"
-                            value={option.value}
-                            onChange={(event) =>
-                              mutateQuestion(question.questionId, (current) => ({
-                                ...current,
-                                options: (current.options ?? []).map((entry) =>
-                                  entry.optionId === option.optionId
-                                    ? {
-                                        ...entry,
-                                        value: event.target.value
-                                      }
-                                    : entry
-                                )
-                              }))
-                            }
-                            style={{ flex: "1 1 180px" }}
-                          />
-                        </div>
+                  {question.type === "number" ? (
+                    <div className="inline-stack">
+                      <label>
+                        Min value
+                        <input
+                          type="number"
+                          value={question.validation?.min ?? ""}
+                          onChange={(event) =>
+                            mutateQuestion(question.questionId, (current) => ({
+                              ...current,
+                              validation: {
+                                ...current.validation,
+                                min: event.target.value ? Number(event.target.value) : undefined
+                              }
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        Max value
+                        <input
+                          type="number"
+                          value={question.validation?.max ?? ""}
+                          onChange={(event) =>
+                            mutateQuestion(question.questionId, (current) => ({
+                              ...current,
+                              validation: {
+                                ...current.validation,
+                                max: event.target.value ? Number(event.target.value) : undefined
+                              }
+                            }))
+                          }
+                        />
+                      </label>
+                    </div>
+                  ) : null}
 
-                        <div className="inline-stack">
-                          <button
-                            type="button"
-                            className="button-secondary"
-                            onClick={() =>
-                              onOpenBranch([
-                                ...path,
-                                {
-                                  questionId: question.questionId,
-                                  optionId: option.optionId
+                  {(question.type === "radio" || question.type === "checkbox") && question.options ? (
+                    <div className="option-editor">
+                      <div className="option-editor-head">
+                        <strong className="field-label">Options & Branches</strong>
+                        <button
+                          type="button"
+                          className="button-secondary"
+                          onClick={() =>
+                            mutateQuestion(question.questionId, (current) => ({
+                              ...current,
+                              options: [...(current.options ?? []), makeOption()]
+                            }))
+                          }
+                        >
+                          + Option
+                        </button>
+                      </div>
+
+                      {question.options.map((option) => {
+                        const optionFollowUpCount = option.branch?.questions.length ?? 0;
+
+                        return (
+                          <article key={option.optionId} className="card option-card">
+                            <div className="inline-stack align-center">
+                              <input
+                                placeholder="Option label"
+                                value={option.label}
+                                onChange={(event) =>
+                                  mutateQuestion(question.questionId, (current) => ({
+                                    ...current,
+                                    options: (current.options ?? []).map((entry) =>
+                                      entry.optionId === option.optionId
+                                        ? {
+                                            ...entry,
+                                            label: event.target.value
+                                          }
+                                        : entry
+                                    )
+                                  }))
                                 }
-                              ])
-                            }
-                          >
-                            {followUpCount > 0 ? "Edit follow-up" : "Add follow-up"}
-                          </button>
-                          <button
-                            type="button"
-                            className="button-danger"
-                            onClick={() =>
-                              mutateQuestion(question.questionId, (current) => ({
-                                ...current,
-                                options: (current.options ?? []).filter(
-                                  (entry) => entry.optionId !== option.optionId
-                                )
-                              }))
-                            }
-                          >
-                            Remove option
-                          </button>
+                                style={{ flex: "1 1 200px" }}
+                              />
+                              <input
+                                placeholder="Option value"
+                                value={option.value}
+                                onChange={(event) =>
+                                  mutateQuestion(question.questionId, (current) => ({
+                                    ...current,
+                                    options: (current.options ?? []).map((entry) =>
+                                      entry.optionId === option.optionId
+                                        ? {
+                                            ...entry,
+                                            value: event.target.value
+                                          }
+                                        : entry
+                                    )
+                                  }))
+                                }
+                                style={{ flex: "1 1 180px" }}
+                              />
+                            </div>
 
-                          <span className="badge">
-                            {followUpCount} follow-up {followUpCount === 1 ? "question" : "questions"}
-                          </span>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              ) : null}
+                            <div className="inline-stack">
+                              <button
+                                type="button"
+                                className="button-secondary"
+                                onClick={() =>
+                                  onOpenBranch([
+                                    ...path,
+                                    {
+                                      questionId: question.questionId,
+                                      optionId: option.optionId
+                                    }
+                                  ])
+                                }
+                              >
+                                {optionFollowUpCount > 0 ? "Edit follow-up" : "Add follow-up"}
+                              </button>
+                              <button
+                                type="button"
+                                className="button-danger"
+                                onClick={() =>
+                                  mutateQuestion(question.questionId, (current) => ({
+                                    ...current,
+                                    options: (current.options ?? []).filter(
+                                      (entry) => entry.optionId !== option.optionId
+                                    )
+                                  }))
+                                }
+                              >
+                                Remove option
+                              </button>
+
+                              <span className="badge">
+                                {optionFollowUpCount} follow-up {optionFollowUpCount === 1 ? "question" : "questions"}
+                              </span>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <p className="helper-text builder-question-collapsed-note">
+                  Collapsed while you edit another question. Click this card to continue here.
+                </p>
+              )}
             </article>
           );
         })}
