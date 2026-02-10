@@ -1,0 +1,250 @@
+:root {
+  --font-display: "Avenir Next", "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --bg: #f6f4ef;
+  --bg-soft: #efebe2;
+  --surface: #fffdf8;
+  --surface-strong: #fff8e9;
+  --text: #172121;
+  --text-muted: #4f5d5b;
+  --accent: #0f766e;
+  --accent-strong: #0b4f4a;
+  --danger: #c2410c;
+  --border: #cad2c5;
+  --shadow: rgba(12, 24, 22, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at 15% 15%, #d7e9e6 0, transparent 35%),
+    radial-gradient(circle at 80% 10%, #f8e8c8 0, transparent 34%),
+    linear-gradient(160deg, var(--bg) 0%, #f1eee6 100%);
+  color: var(--text);
+}
+
+a {
+  color: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 2rem 1rem 4rem;
+}
+
+.container {
+  width: min(1200px, 100%);
+  margin: 0 auto;
+}
+
+.card {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 8px 24px var(--shadow);
+  border-radius: 16px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+input,
+textarea,
+select {
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text);
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+button {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 0.55rem 0.85rem;
+  cursor: pointer;
+}
+
+.button-primary {
+  background: var(--accent);
+  color: #f8fffe;
+}
+
+.button-primary:hover {
+  background: var(--accent-strong);
+}
+
+.button-secondary {
+  background: #ffffff;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.button-danger {
+  background: #fff;
+  border-color: #f5d3be;
+  color: var(--danger);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid #b6cfc8;
+  background: #ebf6f4;
+  color: #0f5f58;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.inline-stack {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.form-grid {
+  display: grid;
+  gap: 0.8rem;
+}
+
+@media (max-width: 840px) {
+  .app-shell {
+    padding: 1rem 0.7rem 3rem;
+  }
+}
+
+.builder-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.flow-outline-card {
+  padding: 1rem;
+}
+
+.flow-outline-sticky {
+  display: grid;
+  gap: 0.75rem;
+  position: sticky;
+  top: 1rem;
+  align-content: start;
+}
+
+.flow-outline-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.flow-outline-item {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #ffffff;
+  display: grid;
+  gap: 0.25rem;
+  text-align: left;
+  padding: 0.6rem 0.7rem;
+}
+
+.flow-outline-item.is-active {
+  border-color: #77b7ad;
+  background: #e9f4f1;
+  box-shadow: inset 0 0 0 1px #bfe0d9;
+}
+
+.flow-outline-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.flow-outline-meta {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.flow-context-bar {
+  padding: 0.95rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.flow-stepper {
+  display: flex;
+  gap: 0.55rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.flow-step {
+  min-width: 150px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--text);
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+}
+
+.flow-step.is-active {
+  border-color: #77b7ad;
+  background: #e9f4f1;
+  box-shadow: inset 0 0 0 1px #bfe0d9;
+}
+
+.flow-step-index {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #1f6f66;
+}
+
+.flow-step-label {
+  font-size: 0.84rem;
+  color: #244542;
+}
+
+.builder-question-card {
+  background: #ffffff;
+  border-color: var(--border);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.builder-question-card.is-focused {
+  border-color: #77b7ad;
+  box-shadow: 0 0 0 2px rgba(119, 183, 173, 0.25), 0 8px 24px var(--shadow);
+}
+
+@media (max-width: 1000px) {
+  .builder-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-outline-sticky {
+    position: static;
+  }
+}
