@@ -4,14 +4,27 @@ import { describe, expect, it } from "vitest";
 
 import { exportSubmissionsCsv, persistCompletedSubmission } from "@/lib/db/submission-store";
 import { isSubmissionDbConfigured } from "@/lib/db/platform";
-import { assertSafeDbTargetHost, assertSafeDbTargetPort } from "@/lib/server/network-policy";
+import {
+  assertSafeDbTargetHost,
+  assertSafeDbTargetPort,
+  assertStableDbTargetResolution
+} from "@/lib/server/network-policy";
 import { type FormSchema, type SessionState } from "@/lib/types";
 
 describe("security hardening", () => {
   it("blocks private or localhost DB target hosts", async () => {
     await expect(assertSafeDbTargetHost("127.0.0.1")).rejects.toThrow();
     await expect(assertSafeDbTargetHost("localhost")).rejects.toThrow();
-    await expect(assertSafeDbTargetHost("8.8.8.8")).resolves.toBe("8.8.8.8");
+    await expect(assertSafeDbTargetHost("8.8.8.8")).resolves.toEqual({
+      host: "8.8.8.8",
+      resolvedAddresses: ["8.8.8.8"]
+    });
+  });
+
+  it("rejects when host resolution changes between validation and connect", async () => {
+    await expect(
+      assertStableDbTargetResolution("8.8.8.8", ["1.1.1.1"])
+    ).rejects.toThrow();
   });
 
   it("validates DB target port ranges", () => {

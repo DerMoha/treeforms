@@ -18,6 +18,7 @@ export const RESPONDENT_SESSION_TTL_SECONDS = readIntEnv("RESPONDENT_SESSION_TTL
 export const PUBLIC_API_CORS_ORIGINS = readCsvEnv("PUBLIC_API_CORS_ORIGINS");
 export const DB_TARGET_TEST_ALLOWED_HOSTS = readCsvEnv("DB_TARGET_TEST_ALLOWED_HOSTS");
 export const DB_TARGET_TEST_ALLOW_PRIVATE = process.env.DB_TARGET_TEST_ALLOW_PRIVATE === "1";
+export const TRUST_X_FORWARDED_FOR = process.env.TRUST_X_FORWARDED_FOR === "1";
 
 let cachedCredentialKey: string | null = null;
 

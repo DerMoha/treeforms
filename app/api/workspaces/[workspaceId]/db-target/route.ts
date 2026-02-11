@@ -2,7 +2,11 @@ import { NextRequest } from "next/server";
 
 import { setActiveDbTarget } from "@/lib/db/app-store";
 import { enforceCsrf } from "@/lib/server/csrf";
-import { assertSafeDbTargetHost, assertSafeDbTargetPort } from "@/lib/server/network-policy";
+import {
+  assertSafeDbTargetHost,
+  assertSafeDbTargetPort,
+  assertStableDbTargetResolution
+} from "@/lib/server/network-policy";
 import { applyRateLimit } from "@/lib/server/rate-limit";
 import { dbTargetInputSchema } from "@/lib/server/validation";
 import {
@@ -50,10 +54,11 @@ export async function PUT(
 
     const safeHost = await assertSafeDbTargetHost(parsed.data.host);
     const safePort = assertSafeDbTargetPort(parsed.data.port);
+    await assertStableDbTargetResolution(safeHost.host, safeHost.resolvedAddresses);
 
     const result = await setActiveDbTarget(workspaceId, {
       name: parsed.data.name,
-      host: safeHost,
+      host: safeHost.host,
       port: safePort,
       user: parsed.data.user,
       password: parsed.data.password,

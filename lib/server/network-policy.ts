@@ -15,6 +15,11 @@ const BLOCKED_HOSTNAMES = new Set([
   "169.254.169.254"
 ]);
 
+export interface SafeDbTargetHost {
+  host: string;
+  resolvedAddresses: string[];
+}
+
 export async function assertSafeDbTargetHost(hostInput: string) {
   const host = normalizeHost(hostInput);
 
@@ -22,9 +27,7 @@ export async function assertSafeDbTargetHost(hostInput: string) {
     throw new HttpError(400, "host is required");
   }
 
-  if (isAllowedHost(host)) {
-    return host;
-  }
+  const allowlisted = isAllowedHost(host);
 
   if (BLOCKED_HOSTNAMES.has(host)) {
     throw new HttpError(400, "Host is not allowed for DB target testing");
@@ -32,29 +35,22 @@ export async function assertSafeDbTargetHost(hostInput: string) {
 
   const version = isIP(host);
   if (version > 0) {
-    if (!DB_TARGET_TEST_ALLOW_PRIVATE && isPrivateOrReservedIp(host, version)) {
+    if (!allowlisted && !DB_TARGET_TEST_ALLOW_PRIVATE && isPrivateOrReservedIp(host, version)) {
       throw new HttpError(400, "Host resolves to a private or reserved IP range");
     }
-    return host;
+
+    return {
+      host,
+      resolvedAddresses: [host]
+    };
   }
 
-  let addresses: string[] = [];
-
-  try {
-    const results = await lookup(host, {
-      all: true,
-      verbatim: true
-    });
-    addresses = results.map((entry) => entry.address);
-  } catch {
-    throw new HttpError(400, "Unable to resolve host");
-  }
-
+  const addresses = await resolveHostAddresses(host);
   if (addresses.length === 0) {
     throw new HttpError(400, "Unable to resolve host");
   }
 
-  if (!DB_TARGET_TEST_ALLOW_PRIVATE) {
+  if (!allowlisted && !DB_TARGET_TEST_ALLOW_PRIVATE) {
     const privateAddress = addresses.find((address) => {
       const addressVersion = isIP(address);
       return addressVersion > 0 && isPrivateOrReservedIp(address, addressVersion);
@@ -65,7 +61,27 @@ export async function assertSafeDbTargetHost(hostInput: string) {
     }
   }
 
-  return host;
+  return {
+    host,
+    resolvedAddresses: addresses
+  };
+}
+
+export async function assertStableDbTargetResolution(
+  host: string,
+  expectedAddresses: string[]
+) {
+  const expected = normalizeAddressList(expectedAddresses);
+  const resolved = normalizeAddressList(await resolveHostAddresses(host));
+
+  if (
+    expected.length !== resolved.length ||
+    expected.some((address, index) => address !== resolved[index])
+  ) {
+    throw new HttpError(400, "Host resolution changed during validation; retry the request");
+  }
+
+  return resolved;
 }
 
 export function assertSafeDbTargetPort(port: number) {
@@ -78,6 +94,28 @@ export function assertSafeDbTargetPort(port: number) {
 
 function normalizeHost(host: string) {
   return host.trim().toLowerCase();
+}
+
+async function resolveHostAddresses(host: string) {
+  const version = isIP(host);
+  if (version > 0) {
+    return [host];
+  }
+
+  try {
+    const results = await lookup(host, {
+      all: true,
+      verbatim: true
+    });
+
+    return normalizeAddressList(results.map((entry) => entry.address));
+  } catch {
+    throw new HttpError(400, "Unable to resolve host");
+  }
+}
+
+function normalizeAddressList(addresses: string[]) {
+  return Array.from(new Set(addresses.map((entry) => entry.trim()).filter(Boolean))).sort();
 }
 
 function isAllowedHost(host: string) {

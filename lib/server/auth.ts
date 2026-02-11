@@ -9,11 +9,12 @@ import {
   adminLoginPassword,
   adminSessionSecret
 } from "@/lib/server/constants";
+import { toAuthConfigError } from "@/lib/server/auth-config";
 
 export const ADMIN_SESSION_COOKIE = "tf_admin";
 export const CSRF_COOKIE = "tf_csrf";
-const ADMIN_PASSWORD = adminLoginPassword();
-const ADMIN_SECRET = adminSessionSecret();
+let cachedAdminPassword: string | null = null;
+let cachedAdminSecret: string | null = null;
 
 interface AdminSessionPayload {
   workspaceId: string;
@@ -115,7 +116,7 @@ export function clearAdminSessionCookies(response: NextResponse) {
 }
 
 export function verifyAdminPassword(input: string) {
-  const expected = createHash("sha256").update(ADMIN_PASSWORD).digest();
+  const expected = createHash("sha256").update(adminPassword()).digest();
   const actual = createHash("sha256").update(input).digest();
 
   return timingSafeEqual(expected, actual);
@@ -155,7 +156,7 @@ function verifySessionToken(token: string): AdminSessionPayload | null {
 }
 
 function signPayload(encodedPayload: string) {
-  return createHmac("sha256", ADMIN_SECRET)
+  return createHmac("sha256", adminSecret())
     .update(encodedPayload)
     .digest("base64url");
 }
@@ -177,4 +178,38 @@ function secureSignatureEquals(received: string, expected: string) {
 
 function nowSeconds() {
   return Math.floor(Date.now() / 1000);
+}
+
+function adminPassword() {
+  if (cachedAdminPassword) {
+    return cachedAdminPassword;
+  }
+
+  try {
+    cachedAdminPassword = adminLoginPassword();
+    return cachedAdminPassword;
+  } catch (error) {
+    const mapped = toAuthConfigError("ADMIN_LOGIN_PASSWORD", error);
+    if (mapped) {
+      throw mapped;
+    }
+    throw error;
+  }
+}
+
+function adminSecret() {
+  if (cachedAdminSecret) {
+    return cachedAdminSecret;
+  }
+
+  try {
+    cachedAdminSecret = adminSessionSecret();
+    return cachedAdminSecret;
+  } catch (error) {
+    const mapped = toAuthConfigError("ADMIN_SESSION_SECRET", error);
+    if (mapped) {
+      throw mapped;
+    }
+    throw error;
+  }
 }

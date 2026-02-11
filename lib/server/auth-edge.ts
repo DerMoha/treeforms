@@ -1,9 +1,14 @@
 import { type NextRequest } from "next/server";
 
 import { DEFAULT_WORKSPACE_ID, adminSessionSecret } from "@/lib/server/constants";
+import { toAuthConfigError } from "@/lib/server/auth-config";
 
 const ADMIN_SESSION_COOKIE = "tf_admin";
-const secret = adminSessionSecret();
+let cachedSecret: string | null = null;
+
+export function assertAdminSessionEdgeConfig() {
+  void adminSecret();
+}
 
 export async function readAdminSessionEdge(request: NextRequest) {
   const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
@@ -41,7 +46,7 @@ export async function readAdminSessionEdge(request: NextRequest) {
 async function signPayload(payload: string) {
   const key = await crypto.subtle.importKey(
     "raw",
-    new TextEncoder().encode(secret),
+    new TextEncoder().encode(adminSecret()),
     {
       name: "HMAC",
       hash: "SHA-256"
@@ -108,4 +113,21 @@ function base64UrlDecode(input: string) {
 
 function decodeUtf8(bytes: Uint8Array) {
   return new TextDecoder().decode(bytes);
+}
+
+function adminSecret() {
+  if (cachedSecret) {
+    return cachedSecret;
+  }
+
+  try {
+    cachedSecret = adminSessionSecret();
+    return cachedSecret;
+  } catch (error) {
+    const mapped = toAuthConfigError("ADMIN_SESSION_SECRET", error);
+    if (mapped) {
+      throw mapped;
+    }
+    throw error;
+  }
 }

@@ -40,6 +40,7 @@ RESPONDENT_SESSION_TTL_SECONDS=86400
 PUBLIC_API_CORS_ORIGINS=https://admin.example.com
 DB_TARGET_TEST_ALLOWED_HOSTS=db.example.com
 DB_TARGET_TEST_ALLOW_PRIVATE=0
+TRUST_X_FORWARDED_FOR=0
 ```
 
 `SUBMISSION_DATABASE_URL` is optional; it falls back to `APP_DATABASE_URL`.
@@ -47,6 +48,8 @@ DB_TARGET_TEST_ALLOW_PRIVATE=0
 `LOCAL_SQLITE_PATH` is optional and defaults to `.data/treeforms-local.sqlite`.
 
 `CREDENTIAL_ENCRYPTION_KEY`, `ADMIN_LOGIN_PASSWORD`, and `ADMIN_SESSION_SECRET` are required in non-test environments.
+
+`TRUST_X_FORWARDED_FOR` defaults to `0`. Set it to `1` only when running behind a trusted proxy that correctly sets `x-forwarded-for`.
 
 If `APP_DATABASE_URL` is not set, Treeforms now persists local app state (forms/drafts/versions/sessions) to SQLite so builder data survives server restarts. Set `LOCAL_SQLITE_DISABLED=1` to fall back to pure in-memory mode.
 

@@ -11,6 +11,10 @@ export interface SchemaValidationResult {
   errors: string[];
 }
 
+export interface SchemaValidationOptions {
+  enforceGlobalQuestionIdUniqueness?: boolean;
+}
+
 const BRANCHABLE_TYPES: QuestionType[] = ["radio", "checkbox"];
 
 export function createEmptySchema(formId: string, title: string): FormSchema {
@@ -25,7 +29,10 @@ export function createEmptySchema(formId: string, title: string): FormSchema {
   };
 }
 
-export function validateSchema(schema: FormSchema): SchemaValidationResult {
+export function validateSchema(
+  schema: FormSchema,
+  options: SchemaValidationOptions = {}
+): SchemaValidationResult {
   const errors: string[] = [];
 
   if (schema.schemaVersion !== 1) {
@@ -42,10 +49,47 @@ export function validateSchema(schema: FormSchema): SchemaValidationResult {
 
   validateFlow(schema.mainFlow, errors, "mainFlow");
 
+  if (options.enforceGlobalQuestionIdUniqueness) {
+    validateGlobalQuestionIds(schema, errors);
+  }
+
   return {
     valid: errors.length === 0,
     errors
   };
+}
+
+function validateGlobalQuestionIds(schema: FormSchema, errors: string[]) {
+  const seen = new Map<string, string>();
+
+  const walkFlow = (flow: Flow, path: string) => {
+    flow.questions.forEach((question, questionIndex) => {
+      const questionPath = `${path}.questions[${questionIndex}]`;
+      const questionId = question.questionId.trim();
+
+      if (questionId) {
+        const firstPath = seen.get(questionId);
+
+        if (firstPath) {
+          errors.push(
+            `${questionPath}.questionId must be globally unique; first seen at ${firstPath}.questionId`
+          );
+        } else {
+          seen.set(questionId, questionPath);
+        }
+      }
+
+      question.options?.forEach((option, optionIndex) => {
+        if (!option.branch) {
+          return;
+        }
+
+        walkFlow(option.branch, `${questionPath}.options[${optionIndex}].branch`);
+      });
+    });
+  };
+
+  walkFlow(schema.mainFlow, "mainFlow");
 }
 
 export function collectQuestions(schema: FormSchema) {

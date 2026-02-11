@@ -65,9 +65,12 @@ export function prepareImportedSchema(
   }
 
   normalizeFlow(candidate.mainFlow, "mainFlow", warnings);
+  normalizeDuplicateQuestionIds(candidate.mainFlow, "mainFlow", warnings);
 
   const schema = candidate as unknown as FormSchema;
-  const validation = validateSchema(schema);
+  const validation = validateSchema(schema, {
+    enforceGlobalQuestionIdUniqueness: true
+  });
 
   if (!validation.valid) {
     return failure(validation.errors, warnings);
@@ -188,6 +191,69 @@ function normalizeFlow(flow: Record<string, unknown>, path: string, warnings: st
       normalizeFlow(option.branch, `${optionPath}.branch`, warnings);
     });
   });
+}
+
+function normalizeDuplicateQuestionIds(
+  flow: Record<string, unknown>,
+  path: string,
+  warnings: string[],
+  seen = new Map<string, string>()
+) {
+  const questions = flow.questions;
+  if (!Array.isArray(questions)) {
+    return;
+  }
+
+  questions.forEach((question, questionIndex) => {
+    if (!isRecord(question)) {
+      return;
+    }
+
+    const questionPath = `${path}.questions[${questionIndex}]`;
+    const questionId = typeof question.questionId === "string" ? question.questionId.trim() : "";
+
+    if (questionId) {
+      const firstPath = seen.get(questionId);
+
+      if (firstPath) {
+        const replacementId = nextUniqueQuestionId(seen);
+        question.questionId = replacementId;
+        seen.set(replacementId, questionPath);
+        warnings.push(
+          `${questionPath}.questionId duplicated "${questionId}" (first at ${firstPath}.questionId) and was changed to "${replacementId}".`
+        );
+      } else {
+        seen.set(questionId, questionPath);
+      }
+    }
+
+    if (!Array.isArray(question.options)) {
+      return;
+    }
+
+    question.options.forEach((option, optionIndex) => {
+      if (!isRecord(option) || !isRecord(option.branch)) {
+        return;
+      }
+
+      normalizeDuplicateQuestionIds(
+        option.branch,
+        `${questionPath}.options[${optionIndex}].branch`,
+        warnings,
+        seen
+      );
+    });
+  });
+}
+
+function nextUniqueQuestionId(seen: Map<string, string>) {
+  let candidate = makeId("q");
+
+  while (seen.has(candidate)) {
+    candidate = makeId("q");
+  }
+
+  return candidate;
 }
 
 function failure(errors: string[], warnings: string[]): PrepareImportedSchemaResult {

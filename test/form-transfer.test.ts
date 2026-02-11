@@ -173,6 +173,59 @@ describe("prepareImportedSchema", () => {
     expect(options[1]?.value).toBe("opt_b");
   });
 
+  it("auto-renames duplicate questionIds across flows", () => {
+    const raw = {
+      schemaVersion: 1,
+      formId: "form_source",
+      title: "Duplicates",
+      mainFlow: {
+        flowId: "flow_main",
+        questions: [
+          {
+            questionId: "q_dup",
+            type: "radio",
+            label: "Choose",
+            required: true,
+            options: [
+              {
+                optionId: "opt_a",
+                label: "A",
+                value: "A",
+                branch: {
+                  flowId: "flow_branch",
+                  questions: [
+                    {
+                      questionId: "q_dup",
+                      type: "text",
+                      label: "Follow-up duplicate",
+                      required: false
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    const result = prepareImportedSchema(raw, {
+      targetFormId: "form_target",
+      fallbackTitle: "Fallback"
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    const branchQuestion =
+      result.schema.mainFlow.questions[0]?.options?.[0]?.branch?.questions?.[0];
+    expect(branchQuestion).toBeDefined();
+    expect(branchQuestion?.questionId).not.toBe("q_dup");
+    expect(result.warnings.some((warning) => warning.includes("questionId duplicated"))).toBe(true);
+  });
+
   it("rejects malformed top-level payloads", () => {
     const result = prepareImportedSchema(null, {
       targetFormId: "form_target",

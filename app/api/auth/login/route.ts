@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { createAdminSessionToken, setAdminSessionCookies, verifyAdminPassword } from "@/lib/server/auth";
+import { isAuthConfigError } from "@/lib/server/auth-config";
 import { applyRateLimit } from "@/lib/server/rate-limit";
 import { loginInputSchema } from "@/lib/server/validation";
 import { HttpError, normalizeSafeRedirect, readJson } from "@/lib/server/http";
@@ -65,6 +66,16 @@ export async function POST(request: NextRequest) {
     setAdminSessionCookies(response, session);
     return response;
   } catch (error) {
+    if (isAuthConfigError(error)) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          details: null
+        },
+        { status: 503 }
+      );
+    }
+
     if (error instanceof HttpError) {
       return NextResponse.json(
         {

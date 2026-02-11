@@ -95,4 +95,37 @@ describe("validateSchema", () => {
     expect(result.valid).toBe(false);
     expect(result.errors.some((error) => error.includes("must be unique"))).toBe(true);
   });
+
+  it("enforces global questionId uniqueness only in strict mode", () => {
+    const schema = validSchema();
+    const radio = schema.mainFlow.questions[0];
+
+    if (!radio.options) {
+      throw new Error("options missing");
+    }
+
+    radio.options[1] = {
+      ...radio.options[1],
+      branch: {
+        flowId: "flow_dup",
+        questions: [
+          {
+            questionId: "q2",
+            type: "text",
+            label: "Duplicate ID in branch",
+            required: false
+          }
+        ]
+      }
+    };
+
+    const tolerant = validateSchema(schema);
+    expect(tolerant.valid).toBe(true);
+
+    const strict = validateSchema(schema, {
+      enforceGlobalQuestionIdUniqueness: true
+    });
+    expect(strict.valid).toBe(false);
+    expect(strict.errors.some((error) => error.includes("globally unique"))).toBe(true);
+  });
 });

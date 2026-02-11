@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "lint": "npm run typecheck",
     "test": "vitest run",
     "test:watch": "vitest"
   },

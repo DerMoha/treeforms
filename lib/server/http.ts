@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { readAdminSession } from "@/lib/server/auth";
-import { IS_PRODUCTION } from "@/lib/server/constants";
+import { IS_PRODUCTION, TRUST_X_FORWARDED_FOR } from "@/lib/server/constants";
 
 const DEFAULT_JSON_LIMIT_BYTES = 256 * 1024;
 
@@ -45,12 +45,8 @@ export async function readJson<T>(
   } = {}
 ): Promise<T> {
   const maxBytes = options.maxBytes ?? DEFAULT_JSON_LIMIT_BYTES;
-  const raw = await request.text();
-  const sizeBytes = Buffer.byteLength(raw, "utf8");
-
-  if (sizeBytes > maxBytes) {
-    throw new HttpError(413, "Request body is too large");
-  }
+  assertContentLengthWithinLimit(request, maxBytes);
+  const raw = await readBodyWithinLimit(request, maxBytes);
 
   const trimmed = raw.trim();
   if (!trimmed) {
@@ -129,14 +125,90 @@ export function isMutationMethod(method: string) {
 }
 
 export function requestIp(request: Pick<NextRequest, "headers">) {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) {
-      return first;
+  if (TRUST_X_FORWARDED_FOR) {
+    const forwarded = forwardedForFirstIp(request.headers.get("x-forwarded-for"));
+    if (forwarded) {
+      return forwarded;
     }
   }
 
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  return realIp || "0.0.0.0";
+  const realIp = normalizeHeaderValue(request.headers.get("x-real-ip"));
+  if (realIp) {
+    return realIp;
+  }
+
+  return "0.0.0.0";
+}
+
+function assertContentLengthWithinLimit(
+  request: Pick<NextRequest, "headers">,
+  maxBytes: number
+) {
+  const rawLength = request.headers.get("content-length")?.trim();
+  if (!rawLength) {
+    return;
+  }
+
+  if (!/^\d+$/.test(rawLength)) {
+    throw new HttpError(400, "Invalid content-length header");
+  }
+
+  const contentLength = Number(rawLength);
+  if (!Number.isSafeInteger(contentLength) || contentLength < 0) {
+    throw new HttpError(400, "Invalid content-length header");
+  }
+
+  if (contentLength > maxBytes) {
+    throw new HttpError(413, "Request body is too large");
+  }
+}
+
+async function readBodyWithinLimit(
+  request: Pick<NextRequest, "body">,
+  maxBytes: number
+) {
+  if (!request.body) {
+    return "";
+  }
+
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let result = "";
+
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) {
+      break;
+    }
+
+    const value = chunk.value;
+    if (!value) {
+      continue;
+    }
+
+    totalBytes += value.byteLength;
+
+    if (totalBytes > maxBytes) {
+      throw new HttpError(413, "Request body is too large");
+    }
+
+    result += decoder.decode(value, { stream: true });
+  }
+
+  result += decoder.decode();
+  return result;
+}
+
+function forwardedForFirstIp(value: string | null) {
+  const normalized = normalizeHeaderValue(value);
+  if (!normalized) {
+    return "";
+  }
+
+  return normalizeHeaderValue(normalized.split(",")[0] ?? "");
+}
+
+function normalizeHeaderValue(value: string | null) {
+  return value?.trim() ?? "";
 }

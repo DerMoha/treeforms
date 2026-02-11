@@ -346,7 +346,9 @@ export async function getDraft(formId: string): Promise<DraftRecord | null> {
 }
 
 export async function updateDraft(formId: string, schema: FormSchema, actor = "system") {
-  const validation = validateSchema(schema);
+  const validation = validateSchema(schema, {
+    enforceGlobalQuestionIdUniqueness: true
+  });
   if (!validation.valid) {
     return {
       ok: false as const,
@@ -459,7 +461,9 @@ export async function publishDraft(formId: string, actor = "system") {
   }
 
   const schema = JSON.parse(draft.schemaJson) as FormSchema;
-  const validation = validateSchema(schema);
+  const validation = validateSchema(schema, {
+    enforceGlobalQuestionIdUniqueness: true
+  });
 
   if (!validation.valid) {
     return {

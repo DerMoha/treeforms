@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { readAdminSessionEdge } from "@/lib/server/auth-edge";
+import { isAuthConfigError } from "@/lib/server/auth-config";
+import { assertAdminSessionEdgeConfig, readAdminSessionEdge } from "@/lib/server/auth-edge";
 import { PUBLIC_API_CORS_ORIGINS } from "@/lib/server/constants";
 
 const API_PREFIX = "/api/";
@@ -15,7 +16,31 @@ export async function proxy(request: NextRequest) {
   }
 
   if (isProtectedPath(pathname)) {
-    const session = await readAdminSessionEdge(request);
+    try {
+      assertAdminSessionEdgeConfig();
+    } catch (error) {
+      if (isAuthConfigError(error)) {
+        const unavailable = authUnavailableResponse(pathname);
+        applySecurityHeaders(unavailable);
+        return unavailable;
+      }
+
+      throw error;
+    }
+
+    let session;
+
+    try {
+      session = await readAdminSessionEdge(request);
+    } catch (error) {
+      if (isAuthConfigError(error)) {
+        const unavailable = authUnavailableResponse(pathname);
+        applySecurityHeaders(unavailable);
+        return unavailable;
+      }
+
+      throw error;
+    }
 
     if (!session) {
       if (pathname.startsWith(API_PREFIX)) {
@@ -42,6 +67,25 @@ export async function proxy(request: NextRequest) {
   applyCorsHeaders(request, next);
   applySecurityHeaders(next);
   return next;
+}
+
+function authUnavailableResponse(pathname: string) {
+  if (pathname.startsWith(API_PREFIX)) {
+    return NextResponse.json(
+      {
+        error: "Authentication is temporarily unavailable",
+        details: null
+      },
+      { status: 503 }
+    );
+  }
+
+  return new NextResponse("Authentication is temporarily unavailable", {
+    status: 503,
+    headers: {
+      "content-type": "text/plain; charset=utf-8"
+    }
+  });
 }
 
 export const config = {
