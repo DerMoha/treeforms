@@ -54,6 +54,23 @@ Open:
 
 - `http://localhost:3000/builder`
 
+## Run with Docker Compose
+
+```bash
+cp .env.docker.example .env.docker
+# edit .env.docker and set strong secrets/passwords
+docker compose --env-file .env.docker up --build
+```
+
+Open:
+
+- `http://localhost:3000/builder`
+
+This setup starts:
+
+- `app`: Next.js production server
+- `db`: MariaDB 11.4 with persisted storage (`db_data` volume)
+
 ## API surface
 
 Implemented endpoints:

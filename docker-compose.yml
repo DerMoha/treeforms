@@ -1,0 +1,37 @@
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-treeforms}
+      MARIADB_USER: ${MARIADB_USER:-treeforms}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?Set MARIADB_PASSWORD in .env.docker}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Set MARIADB_ROOT_PASSWORD in .env.docker}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u$$MARIADB_USER -p$$MARIADB_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      APP_DATABASE_URL: mysql://${MARIADB_USER:-treeforms}:${MARIADB_PASSWORD}@db:3306/${MARIADB_DATABASE:-treeforms}
+      SUBMISSION_DATABASE_URL: mysql://${MARIADB_USER:-treeforms}:${MARIADB_PASSWORD}@db:3306/${MARIADB_DATABASE:-treeforms}
+      DEFAULT_WORKSPACE_ID: ${DEFAULT_WORKSPACE_ID:-workspace_demo}
+      DEFAULT_WORKSPACE_NAME: ${DEFAULT_WORKSPACE_NAME:-Demo Workspace}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?Set CREDENTIAL_ENCRYPTION_KEY (32+ chars) in .env.docker}
+
+volumes:
+  db_data:
