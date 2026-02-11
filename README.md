@@ -54,22 +54,77 @@ Open:
 
 - `http://localhost:3000/builder`
 
-## Run with Docker Compose
+## Deploy with Docker Compose
+
+This repository includes a production-style Docker setup:
+
+- `app`: Next.js production server
+- `db`: MariaDB 11.4 with persisted storage (`db_data` volume)
+
+### 1) First deployment
 
 ```bash
 cp .env.docker.example .env.docker
-# edit .env.docker and set strong secrets/passwords
-docker compose --env-file .env.docker up --build
+```
+
+Edit `.env.docker` and set strong secrets:
+
+- `MARIADB_PASSWORD`
+- `MARIADB_ROOT_PASSWORD`
+- `CREDENTIAL_ENCRYPTION_KEY` (32+ chars)
+
+Start the stack in the background:
+
+```bash
+docker compose --env-file .env.docker up --build -d
+```
+
+If port `3000` is already in use, choose another port:
+
+```bash
+APP_PORT=3001 docker compose --env-file .env.docker up --build -d
+```
+
+### 2) Verify deployment
+
+```bash
+docker compose --env-file .env.docker ps
+curl -i http://127.0.0.1:3000/api/forms
 ```
 
 Open:
 
 - `http://localhost:3000/builder`
 
-This setup starts:
+If you used `APP_PORT=3001`, open `http://localhost:3001/builder`.
 
-- `app`: Next.js production server
-- `db`: MariaDB 11.4 with persisted storage (`db_data` volume)
+### 3) Deploy updates
+
+From the project directory after pulling new code:
+
+```bash
+docker compose --env-file .env.docker up --build -d
+```
+
+### 4) Operations
+
+View logs:
+
+```bash
+docker compose --env-file .env.docker logs -f app db
+```
+
+Stop services:
+
+```bash
+docker compose --env-file .env.docker down
+```
+
+Stop and remove volumes (deletes DB data):
+
+```bash
+docker compose --env-file .env.docker down -v
+```
 
 ## API surface
 
