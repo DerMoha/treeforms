@@ -32,6 +32,16 @@ export async function getFormBundle(formId: string) {
   };
 }
 
+export async function getFormBundleForWorkspace(formId: string, workspaceId: string) {
+  const bundle = await getFormBundle(formId);
+
+  if (!bundle || bundle.form.workspaceId !== workspaceId) {
+    return null;
+  }
+
+  return bundle;
+}
+
 export async function getPublishedSchemaBySlugAndVersion(slug: string, versionNumber: number) {
   const published = await getPublishedBySlug(slug, versionNumber);
 

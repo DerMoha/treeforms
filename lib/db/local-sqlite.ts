@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 
 const LOCAL_SQLITE_PATH =
   process.env.LOCAL_SQLITE_PATH?.trim() ||
@@ -71,7 +71,7 @@ export function localSqlitePath() {
     return null;
   }
 
-  return resolve(process.cwd(), LOCAL_SQLITE_PATH);
+  return resolveSqlitePath(LOCAL_SQLITE_PATH);
 }
 
 function getLocalSqliteDb(): SqliteDatabase | null {
@@ -89,7 +89,7 @@ function getLocalSqliteDb(): SqliteDatabase | null {
     return null;
   }
 
-  const filePath = resolve(process.cwd(), LOCAL_SQLITE_PATH);
+  const filePath = resolveSqlitePath(LOCAL_SQLITE_PATH);
   mkdirSync(dirname(filePath), { recursive: true });
 
   const db = new Ctor(filePath);
@@ -127,4 +127,22 @@ function loadSqliteCtor(): SqliteCtor | null {
   } catch {
     return null;
   }
+}
+
+function resolveSqlitePath(inputPath: string) {
+  const workspaceRoot = resolve(process.cwd());
+  const resolvedPath = resolve(workspaceRoot, inputPath);
+  const relativeToRoot = relative(workspaceRoot, resolvedPath);
+  const normalizedRelative = relativeToRoot.replaceAll("\\", "/");
+
+  const escapesWorkspace =
+    normalizedRelative.startsWith("..") ||
+    normalizedRelative.includes("/../") ||
+    normalizedRelative === "..";
+
+  if (escapesWorkspace) {
+    throw new Error("LOCAL_SQLITE_PATH must stay inside the workspace root.");
+  }
+
+  return resolvedPath;
 }

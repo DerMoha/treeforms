@@ -1,24 +1,36 @@
 import { NextRequest } from "next/server";
 
 import { computeRuntimeCursor, reconcileAnswers } from "@/lib/engine";
-import { createSession, getSessionByResumeToken } from "@/lib/db/app-store";
+import { createSession, getSessionByResumeToken, isSessionExpired } from "@/lib/db/app-store";
 import { getPublishedSchemaBySlugAndVersion } from "@/lib/server/forms";
-import { jsonError, jsonOk, readJson } from "@/lib/server/http";
+import { applyRateLimit } from "@/lib/server/rate-limit";
+import { startSessionInputSchema } from "@/lib/server/validation";
+import { handleRouteError, jsonError, jsonOk, readJson } from "@/lib/server/http";
 import { buildRuntimePayload } from "@/lib/server/runtime";
-
-interface StartSessionInput {
-  resumeToken?: string;
-}
 
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ slug: string; version: string }> }
 ) {
   try {
+    const rateLimit = applyRateLimit(request, {
+      scope: "public.session.start",
+      limit: 60,
+      windowMs: 60_000
+    });
+
+    if (!rateLimit.allowed) {
+      return jsonError("Rate limit exceeded", 429, null, {
+        headers: {
+          "retry-after": String(rateLimit.retryAfterSeconds)
+        }
+      });
+    }
+
     const { slug, version } = await context.params;
     const versionNumber = Number(version);
 
-    if (!Number.isFinite(versionNumber)) {
+    if (!Number.isInteger(versionNumber) || versionNumber < 1) {
       return jsonError("Invalid version", 400);
     }
 
@@ -28,15 +40,22 @@ export async function POST(
       return jsonError("Published form not found", 404);
     }
 
-    const body = await readJson<StartSessionInput>(request).catch(
-      () => null as StartSessionInput | null
-    );
+    const rawBody = await readJson<unknown>(request, {
+      maxBytes: 8 * 1024,
+      allowEmpty: true
+    });
+    const body = startSessionInputSchema.safeParse(rawBody);
 
-    if (body?.resumeToken) {
-      const resumed = await getSessionByResumeToken(body.resumeToken);
+    if (!body.success) {
+      return jsonError("Invalid session start payload", 400, body.error.flatten());
+    }
+
+    if (body.data.resumeToken) {
+      const resumed = await getSessionByResumeToken(body.data.resumeToken);
 
       if (
         resumed &&
+        !isSessionExpired(resumed) &&
         resumed.formId === published.formId &&
         resumed.versionNumber === published.versionNumber
       ) {
@@ -71,6 +90,7 @@ export async function POST(
       answers: {},
       history: cursor.currentQuestionId ? [cursor.currentQuestionId] : [],
       branchTrace: [],
+      expiresAt: sessionTokens.expiresAt,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -94,6 +114,6 @@ export async function POST(
       { status: 201 }
     );
   } catch (error) {
-    return jsonError("Unable to start session", 500, String(error));
+    return handleRouteError("Unable to start session", error);
   }
 }

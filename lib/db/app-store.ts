@@ -4,6 +4,7 @@ import { makeId, slugify } from "@/lib/ids";
 import { readLocalJson, writeLocalJson } from "@/lib/db/local-sqlite";
 import { createEmptySchema, validateSchema } from "@/lib/schema";
 import {
+  createEphemeralExternalPool,
   ensureAppTables,
   ensureSubmissionTables,
   getAppPool,
@@ -15,7 +16,11 @@ import {
   buildMysqlUrl
 } from "@/lib/db/platform";
 import { encryptSecret, decryptSecret } from "@/lib/security/crypto";
-import { DEFAULT_WORKSPACE_ID, DEFAULT_WORKSPACE_NAME } from "@/lib/server/constants";
+import {
+  DEFAULT_WORKSPACE_ID,
+  DEFAULT_WORKSPACE_NAME,
+  RESPONDENT_SESSION_TTL_SECONDS
+} from "@/lib/server/constants";
 import {
   type DbTargetConfig,
   type DbTargetInput,
@@ -37,6 +42,7 @@ interface SessionRow extends RowDataPacket {
   answers_json: string;
   history_json: string;
   branch_trace_json: string;
+  expires_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -621,10 +627,10 @@ export async function createSession(data: {
 }) {
   const sessionToken = crypto.randomUUID().replace(/-/g, "");
   const resumeToken = crypto.randomUUID().replace(/-/g, "");
+  const createdAt = nowIso();
+  const expiresAt = computeRespondentSessionExpiry(createdAt);
 
   if (!isAppDbConfigured()) {
-    const now = nowIso();
-
     const session: SessionState = {
       sessionToken,
       resumeToken,
@@ -636,8 +642,9 @@ export async function createSession(data: {
       answers: {},
       history: data.currentQuestionId ? [data.currentQuestionId] : [],
       branchTrace: [],
-      createdAt: now,
-      updatedAt: now
+      expiresAt,
+      createdAt,
+      updatedAt: createdAt
     };
 
     memoryState.sessions.set(sessionToken, session);
@@ -646,7 +653,8 @@ export async function createSession(data: {
 
     return {
       sessionToken,
-      resumeToken
+      resumeToken,
+      expiresAt
     };
   }
 
@@ -666,9 +674,10 @@ export async function createSession(data: {
         current_question_id,
         answers_json,
         history_json,
-        branch_trace_json
+        branch_trace_json,
+        expires_at
       )
-      VALUES (?, ?, ?, ?, ?, 'in_progress', ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, 'in_progress', ?, ?, ?, ?, ?)
     `,
     [
       sessionToken,
@@ -679,13 +688,15 @@ export async function createSession(data: {
       data.currentQuestionId,
       JSON.stringify({}),
       JSON.stringify([]),
-      JSON.stringify([])
+      JSON.stringify([]),
+      expiresAt
     ]
   );
 
   return {
     sessionToken,
-    resumeToken
+    resumeToken,
+    expiresAt
   };
 }
 
@@ -711,6 +722,7 @@ export async function getSession(sessionToken: string): Promise<SessionState | n
         answers_json,
         history_json,
         branch_trace_json,
+        expires_at,
         created_at,
         updated_at
       FROM respondent_sessions
@@ -751,6 +763,7 @@ export async function getSessionByResumeToken(resumeToken: string): Promise<Sess
         answers_json,
         history_json,
         branch_trace_json,
+        expires_at,
         created_at,
         updated_at
       FROM respondent_sessions
@@ -847,9 +860,14 @@ export async function testDbTarget(input: DbTargetInput) {
     databaseName: input.databaseName
   });
 
-  const pool = getExternalPool(url);
-  await pingPool(pool);
-  await ensureSubmissionTables(pool);
+  const pool = createEphemeralExternalPool(url, 4000);
+
+  try {
+    await pingPool(pool);
+    await ensureSubmissionTables(pool);
+  } finally {
+    await pool.end();
+  }
 
   return {
     ok: true
@@ -1121,6 +1139,8 @@ async function writeAuditEvent(
 }
 
 function mapSessionRow(row: SessionRow): SessionState {
+  const createdAt = new Date(row.created_at).toISOString();
+
   return {
     sessionToken: row.session_token,
     resumeToken: row.resume_token,
@@ -1132,7 +1152,10 @@ function mapSessionRow(row: SessionRow): SessionState {
     answers: safeJson(row.answers_json, {}),
     history: safeJson(row.history_json, []),
     branchTrace: safeJson(row.branch_trace_json, []),
-    createdAt: new Date(row.created_at).toISOString(),
+    expiresAt: row.expires_at
+      ? new Date(row.expires_at).toISOString()
+      : computeRespondentSessionExpiry(createdAt),
+    createdAt,
     updatedAt: new Date(row.updated_at).toISOString()
   };
 }
@@ -1143,6 +1166,14 @@ function safeJson<T>(value: string, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+export function isSessionExpired(session: Pick<SessionState, "expiresAt">) {
+  return Date.parse(session.expiresAt) <= Date.now();
+}
+
+function computeRespondentSessionExpiry(createdAtIso: string) {
+  return new Date(Date.parse(createdAtIso) + RESPONDENT_SESSION_TTL_SECONDS * 1000).toISOString();
 }
 
 function nowIso() {
@@ -1186,7 +1217,18 @@ function hydrateMemoryStateFromDisk() {
     memoryState.forms = new Map(stored.forms ?? []);
     memoryState.drafts = new Map(stored.drafts ?? []);
     memoryState.versions = new Map(stored.versions ?? []);
-    memoryState.sessions = new Map(stored.sessions ?? []);
+    memoryState.sessions = new Map(
+      (stored.sessions ?? []).map(([sessionToken, session]) => {
+        const normalized: SessionState = {
+          ...session,
+          expiresAt:
+            typeof session.expiresAt === "string"
+              ? session.expiresAt
+              : computeRespondentSessionExpiry(session.createdAt)
+        };
+        return [sessionToken, normalized];
+      })
+    );
     memoryState.sessionByResumeToken = new Map(stored.sessionByResumeToken ?? []);
     memoryState.dbTargets = new Map(stored.dbTargets ?? []);
     memoryState.auditEvents = Array.isArray(stored.auditEvents) ? stored.auditEvents : [];

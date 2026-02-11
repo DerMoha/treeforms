@@ -1,23 +1,56 @@
 import { NextRequest } from "next/server";
 
-import { publishDraft } from "@/lib/db/app-store";
-import { jsonError, jsonOk, readJson } from "@/lib/server/http";
-
-interface PublishInput {
-  actor?: string;
-}
+import { getFormById, publishDraft } from "@/lib/db/app-store";
+import { enforceCsrf } from "@/lib/server/csrf";
+import { applyRateLimit } from "@/lib/server/rate-limit";
+import { publishInputSchema } from "@/lib/server/validation";
+import {
+  handleRouteError,
+  jsonError,
+  jsonOk,
+  readJson,
+  workspaceIdFromRequest
+} from "@/lib/server/http";
 
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ formId: string }> }
 ) {
   try {
-    const { formId } = await context.params;
-    const body = await readJson<PublishInput>(request).catch(
-      () => null as PublishInput | null
-    );
+    enforceCsrf(request);
+    const rateLimit = applyRateLimit(request, {
+      scope: "admin.forms.publish",
+      limit: 20,
+      windowMs: 60_000
+    });
 
-    const result = await publishDraft(formId, body?.actor ?? "system");
+    if (!rateLimit.allowed) {
+      return jsonError("Rate limit exceeded", 429, null, {
+        headers: {
+          "retry-after": String(rateLimit.retryAfterSeconds)
+        }
+      });
+    }
+
+    const workspaceId = workspaceIdFromRequest(request);
+    const { formId } = await context.params;
+    const form = await getFormById(formId);
+
+    if (!form || form.workspaceId !== workspaceId) {
+      return jsonError("Form not found", 404);
+    }
+
+    const rawBody = await readJson<unknown>(request, {
+      maxBytes: 8 * 1024,
+      allowEmpty: true
+    });
+    const body = publishInputSchema.safeParse(rawBody);
+
+    if (!body.success) {
+      return jsonError("Invalid publish payload", 400, body.error.flatten());
+    }
+
+    const result = await publishDraft(formId, body.data.actor ?? "system");
 
     if (!result.ok) {
       return jsonError(result.error, result.status, (result as { errors?: string[] }).errors ?? null);
@@ -29,6 +62,6 @@ export async function POST(
       versionId: result.versionId
     });
   } catch (error) {
-    return jsonError("Unable to publish form", 500, String(error));
+    return handleRouteError("Unable to publish form", error);
   }
 }

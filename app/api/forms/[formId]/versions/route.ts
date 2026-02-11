@@ -1,12 +1,21 @@
-import { listVersions } from "@/lib/db/app-store";
-import { jsonError, jsonOk } from "@/lib/server/http";
+import { NextRequest } from "next/server";
+
+import { getFormById, listVersions } from "@/lib/db/app-store";
+import { handleRouteError, jsonError, jsonOk, workspaceIdFromRequest } from "@/lib/server/http";
 
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   context: { params: Promise<{ formId: string }> }
 ) {
   try {
+    const workspaceId = workspaceIdFromRequest(request);
     const { formId } = await context.params;
+    const form = await getFormById(formId);
+
+    if (!form || form.workspaceId !== workspaceId) {
+      return jsonError("Form not found", 404);
+    }
+
     const versions = await listVersions(formId);
 
     return jsonOk({
@@ -16,6 +25,6 @@ export async function GET(
       }))
     });
   } catch (error) {
-    return jsonError("Unable to list versions", 500, String(error));
+    return handleRouteError("Unable to list versions", error);
   }
 }

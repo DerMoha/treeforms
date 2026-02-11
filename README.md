@@ -32,11 +32,21 @@ LOCAL_SQLITE_PATH=.data/treeforms-local.sqlite
 DEFAULT_WORKSPACE_ID=workspace_demo
 DEFAULT_WORKSPACE_NAME=Demo Workspace
 CREDENTIAL_ENCRYPTION_KEY=replace-with-32-plus-char-secret
+ADMIN_LOGIN_PASSWORD=replace-with-strong-admin-password
+ADMIN_SESSION_SECRET=replace-with-32-plus-char-session-secret
+# Optional:
+ADMIN_SESSION_TTL_SECONDS=28800
+RESPONDENT_SESSION_TTL_SECONDS=86400
+PUBLIC_API_CORS_ORIGINS=https://admin.example.com
+DB_TARGET_TEST_ALLOWED_HOSTS=db.example.com
+DB_TARGET_TEST_ALLOW_PRIVATE=0
 ```
 
 `SUBMISSION_DATABASE_URL` is optional; it falls back to `APP_DATABASE_URL`.
 
 `LOCAL_SQLITE_PATH` is optional and defaults to `.data/treeforms-local.sqlite`.
+
+`CREDENTIAL_ENCRYPTION_KEY`, `ADMIN_LOGIN_PASSWORD`, and `ADMIN_SESSION_SECRET` are required in non-test environments.
 
 If `APP_DATABASE_URL` is not set, Treeforms now persists local app state (forms/drafts/versions/sessions) to SQLite so builder data survives server restarts. Set `LOCAL_SQLITE_DISABLED=1` to fall back to pure in-memory mode.
 
@@ -130,6 +140,8 @@ docker compose --env-file .env.docker down -v
 
 Implemented endpoints:
 
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
 - `POST /api/forms`
 - `GET /api/forms`
 - `POST /api/forms/import`
@@ -147,6 +159,8 @@ Implemented endpoints:
 - `POST /api/public/sessions/:sessionToken/complete`
 - `POST /api/workspaces/:workspaceId/db-target/test`
 - `PUT /api/workspaces/:workspaceId/db-target`
+
+Builder and workspace API routes now require an admin session cookie. Public runtime routes (`/f/*` and `/api/public/*`) remain publicly accessible.
 
 ## Form JSON import/export
 

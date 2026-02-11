@@ -8,26 +8,41 @@ import {
   setAnswer,
   RuntimeValidationError
 } from "@/lib/engine";
-import { getSession, updateSessionState } from "@/lib/db/app-store";
+import { getSession, isSessionExpired, updateSessionState } from "@/lib/db/app-store";
 import { getPublishedSchemaByFormAndVersion } from "@/lib/server/forms";
-import { jsonError, jsonOk, readJson } from "@/lib/server/http";
+import { applyRateLimit } from "@/lib/server/rate-limit";
 import { buildRuntimePayload } from "@/lib/server/runtime";
-
-interface SaveAnswerInput {
-  questionId?: string;
-  value?: unknown;
-}
+import { saveAnswerInputSchema } from "@/lib/server/validation";
+import { handleRouteError, jsonError, jsonOk, readJson } from "@/lib/server/http";
 
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ sessionToken: string }> }
 ) {
   try {
+    const rateLimit = applyRateLimit(request, {
+      scope: "public.session.answer",
+      limit: 120,
+      windowMs: 60_000
+    });
+
+    if (!rateLimit.allowed) {
+      return jsonError("Rate limit exceeded", 429, null, {
+        headers: {
+          "retry-after": String(rateLimit.retryAfterSeconds)
+        }
+      });
+    }
+
     const { sessionToken } = await context.params;
     const session = await getSession(sessionToken);
 
     if (!session) {
       return jsonError("Session not found", 404);
+    }
+
+    if (isSessionExpired(session)) {
+      return jsonError("Session expired", 410);
     }
 
     if (session.status === "completed") {
@@ -40,12 +55,16 @@ export async function POST(
       return jsonError("Published form version not found", 404);
     }
 
-    const body = await readJson<SaveAnswerInput>(request);
-    const questionId = body.questionId;
+    const rawBody = await readJson<unknown>(request, {
+      maxBytes: 32 * 1024
+    });
+    const body = saveAnswerInputSchema.safeParse(rawBody);
 
-    if (!questionId) {
-      return jsonError("questionId is required", 400);
+    if (!body.success) {
+      return jsonError("Invalid answer payload", 400, body.error.flatten());
     }
+
+    const questionId = body.data.questionId;
 
     const reconciledBefore = reconcileAnswers(published.schema, session.answers);
     const cursor = computeRuntimeCursor(
@@ -64,7 +83,7 @@ export async function POST(
     }
 
     let nextAnswers;
-    const clearingAnswer = body.value === null;
+    const clearingAnswer = body.data.value === null;
 
     if (clearingAnswer) {
       if (activeQuestion.question.required) {
@@ -79,7 +98,7 @@ export async function POST(
           published.schema,
           reconciledBefore.answers,
           activeQuestion.question,
-          body.value,
+          body.data.value,
           activeQuestion.flowPath
         );
       } catch (error) {
@@ -135,6 +154,6 @@ export async function POST(
       }
     });
   } catch (error) {
-    return jsonError("Unable to save answer", 500, String(error));
+    return handleRouteError("Unable to save answer", error);
   }
 }

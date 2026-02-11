@@ -1,11 +1,16 @@
 import { createPool, type Pool } from "mysql2/promise";
 
-import { APP_DB_URL, PLATFORM_SUBMISSION_DB_URL } from "@/lib/server/constants";
+import {
+  APP_DB_URL,
+  PLATFORM_SUBMISSION_DB_URL,
+  RESPONDENT_SESSION_TTL_SECONDS
+} from "@/lib/server/constants";
 
 let appPool: Pool | null = null;
 let appTablesEnsured = false;
 let submissionTablesEnsured = false;
 const externalPools = new Map<string, Pool>();
+const CONNECT_TIMEOUT_MS = 5000;
 
 export function isAppDbConfigured() {
   return Boolean(APP_DB_URL);
@@ -43,9 +48,19 @@ export function getExternalPool(url: string) {
     return existing;
   }
 
-  const pool = createPool(url);
+  const pool = createPool({
+    uri: url,
+    connectTimeout: CONNECT_TIMEOUT_MS
+  });
   externalPools.set(url, pool);
   return pool;
+}
+
+export function createEphemeralExternalPool(url: string, connectTimeout = CONNECT_TIMEOUT_MS) {
+  return createPool({
+    uri: url,
+    connectTimeout
+  });
 }
 
 export async function ensureAppTables() {
@@ -148,12 +163,15 @@ export async function ensureAppTables() {
       answers_json LONGTEXT NOT NULL,
       history_json LONGTEXT NOT NULL,
       branch_trace_json LONGTEXT NOT NULL,
+      expires_at DATETIME NULL,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_respondent_sessions_form_id (form_id),
       INDEX idx_respondent_sessions_workspace_id (workspace_id)
     )
   `);
+
+  await ensureRespondentSessionExpiryColumn(pool);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS audit_events (
@@ -168,6 +186,37 @@ export async function ensureAppTables() {
   `);
 
   appTablesEnsured = true;
+}
+
+async function ensureRespondentSessionExpiryColumn(pool: Pool) {
+  try {
+    await pool.query(`ALTER TABLE respondent_sessions ADD COLUMN expires_at DATETIME NULL`);
+  } catch (error) {
+    if (isDuplicateColumnError(error)) {
+      // Column already exists.
+    } else {
+      throw error;
+    }
+  }
+
+  await pool.query(
+    `
+      UPDATE respondent_sessions
+      SET expires_at = DATE_ADD(created_at, INTERVAL ${RESPONDENT_SESSION_TTL_SECONDS} SECOND)
+      WHERE expires_at IS NULL
+    `
+  );
+}
+
+function isDuplicateColumnError(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const code = "code" in error ? String(error.code) : "";
+  const message = "message" in error ? String(error.message) : "";
+
+  return code === "ER_DUP_FIELDNAME" || message.includes("Duplicate column name");
 }
 
 export async function ensureSubmissionTables(pool: Pool) {

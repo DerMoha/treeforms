@@ -1,19 +1,40 @@
+import { NextRequest } from "next/server";
+
 import { computeRuntimeCursor, reconcileAnswers } from "@/lib/engine";
-import { markSessionCompleted, getSession } from "@/lib/db/app-store";
+import { getSession, isSessionExpired, markSessionCompleted } from "@/lib/db/app-store";
 import { persistCompletedSubmission } from "@/lib/db/submission-store";
 import { getPublishedSchemaByFormAndVersion } from "@/lib/server/forms";
-import { jsonError, jsonOk } from "@/lib/server/http";
+import { applyRateLimit } from "@/lib/server/rate-limit";
+import { handleRouteError, jsonError, jsonOk } from "@/lib/server/http";
 
 export async function POST(
-  _request: Request,
+  request: NextRequest,
   context: { params: Promise<{ sessionToken: string }> }
 ) {
   try {
+    const rateLimit = applyRateLimit(request, {
+      scope: "public.session.complete",
+      limit: 60,
+      windowMs: 60_000
+    });
+
+    if (!rateLimit.allowed) {
+      return jsonError("Rate limit exceeded", 429, null, {
+        headers: {
+          "retry-after": String(rateLimit.retryAfterSeconds)
+        }
+      });
+    }
+
     const { sessionToken } = await context.params;
     const session = await getSession(sessionToken);
 
     if (!session) {
       return jsonError("Session not found", 404);
+    }
+
+    if (isSessionExpired(session)) {
+      return jsonError("Session expired", 410);
     }
 
     if (session.status === "completed") {
@@ -60,6 +81,6 @@ export async function POST(
       branchTrace: reconciled.branchTrace
     });
   } catch (error) {
-    return jsonError("Unable to complete session", 500, String(error));
+    return handleRouteError("Unable to complete session", error);
   }
 }

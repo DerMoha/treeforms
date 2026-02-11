@@ -13,6 +13,7 @@ import {
 } from "react";
 
 import { FlowMinimapOverlay } from "@/components/builder/FlowMinimapOverlay";
+import { readCsrfToken } from "@/lib/client/csrf";
 import { buildFlowOutline, pathKey } from "@/lib/builder-outline";
 import {
   type BranchPathSegment,
@@ -204,7 +205,8 @@ export function FormBuilder({ formId }: Props) {
       const response = await fetch(`/api/forms/${formId}/draft`, {
         method: "PUT",
         headers: {
-          "content-type": "application/json"
+          "content-type": "application/json",
+          "x-csrf-token": readCsrfToken()
         },
         body: JSON.stringify({ schema })
       });
@@ -233,7 +235,10 @@ export function FormBuilder({ formId }: Props) {
 
     try {
       const response = await fetch(`/api/forms/${formId}/publish`, {
-        method: "POST"
+        method: "POST",
+        headers: {
+          "x-csrf-token": readCsrfToken()
+        }
       });
 
       const payload = (await response.json()) as {
@@ -291,7 +296,8 @@ export function FormBuilder({ formId }: Props) {
       const response = await fetch(`/api/forms/${formId}/draft/import`, {
         method: "POST",
         headers: {
-          "content-type": "application/json"
+          "content-type": "application/json",
+          "x-csrf-token": readCsrfToken()
         },
         body: JSON.stringify(parsed)
       });

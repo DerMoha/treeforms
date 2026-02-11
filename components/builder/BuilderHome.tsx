@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
+import { readCsrfToken } from "@/lib/client/csrf";
+
 interface FormSummary {
   formId: string;
   slug: string;
@@ -61,7 +63,8 @@ export function BuilderHome() {
       const response = await fetch("/api/forms", {
         method: "POST",
         headers: {
-          "content-type": "application/json"
+          "content-type": "application/json",
+          "x-csrf-token": readCsrfToken()
         },
         body: JSON.stringify({ title: title.trim() })
       });
@@ -112,7 +115,8 @@ export function BuilderHome() {
       const response = await fetch("/api/forms/import", {
         method: "POST",
         headers: {
-          "content-type": "application/json"
+          "content-type": "application/json",
+          "x-csrf-token": readCsrfToken()
         },
         body: JSON.stringify(parsed)
       });

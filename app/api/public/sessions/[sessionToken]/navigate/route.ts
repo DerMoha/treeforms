@@ -1,20 +1,32 @@
 import { NextRequest } from "next/server";
 
 import { computeRuntimeCursor, findAdjacentQuestionId, reconcileAnswers } from "@/lib/engine";
-import { getSession, updateSessionState } from "@/lib/db/app-store";
+import { getSession, isSessionExpired, updateSessionState } from "@/lib/db/app-store";
 import { getPublishedSchemaByFormAndVersion } from "@/lib/server/forms";
-import { jsonError, jsonOk, readJson } from "@/lib/server/http";
+import { applyRateLimit } from "@/lib/server/rate-limit";
 import { buildRuntimePayload } from "@/lib/server/runtime";
-
-interface NavigateInput {
-  direction?: "back" | "forward";
-}
+import { navigateInputSchema } from "@/lib/server/validation";
+import { handleRouteError, jsonError, jsonOk, readJson } from "@/lib/server/http";
 
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ sessionToken: string }> }
 ) {
   try {
+    const rateLimit = applyRateLimit(request, {
+      scope: "public.session.navigate",
+      limit: 120,
+      windowMs: 60_000
+    });
+
+    if (!rateLimit.allowed) {
+      return jsonError("Rate limit exceeded", 429, null, {
+        headers: {
+          "retry-after": String(rateLimit.retryAfterSeconds)
+        }
+      });
+    }
+
     const { sessionToken } = await context.params;
     const session = await getSession(sessionToken);
 
@@ -22,12 +34,20 @@ export async function POST(
       return jsonError("Session not found", 404);
     }
 
-    const body = await readJson<NavigateInput>(request);
-    const direction = body.direction;
-
-    if (direction !== "back" && direction !== "forward") {
-      return jsonError("direction must be 'back' or 'forward'", 400);
+    if (isSessionExpired(session)) {
+      return jsonError("Session expired", 410);
     }
+
+    const rawBody = await readJson<unknown>(request, {
+      maxBytes: 8 * 1024
+    });
+    const body = navigateInputSchema.safeParse(rawBody);
+
+    if (!body.success) {
+      return jsonError("Invalid navigation payload", 400, body.error.flatten());
+    }
+
+    const direction = body.data.direction;
 
     const published = await getPublishedSchemaByFormAndVersion(session.formId, session.versionNumber);
 
@@ -75,6 +95,6 @@ export async function POST(
       })
     });
   } catch (error) {
-    return jsonError("Unable to navigate session", 500, String(error));
+    return handleRouteError("Unable to navigate session", error);
   }
 }

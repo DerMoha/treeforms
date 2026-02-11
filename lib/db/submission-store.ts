@@ -788,10 +788,13 @@ function safeArray(value: unknown): string[] {
 
 function toCsv(headers: string[], rows: Array<Array<string | number>>) {
   const escapeCell = (value: string | number) => {
-    const text = String(value ?? "");
+    const raw = String(value ?? "");
+    const text = shouldNeutralizeCsvCell(raw) ? `'${raw}` : raw;
+
     if (text.includes(",") || text.includes("\n") || text.includes("\"")) {
       return `"${text.replaceAll("\"", "\"\"")}"`;
     }
+
     return text;
   };
 
@@ -799,6 +802,15 @@ function toCsv(headers: string[], rows: Array<Array<string | number>>) {
   const rowLines = rows.map((row) => row.map(escapeCell).join(","));
 
   return [headerLine, ...rowLines].join("\n");
+}
+
+function shouldNeutralizeCsvCell(value: string) {
+  if (!value) {
+    return false;
+  }
+
+  const first = value[0];
+  return first === "=" || first === "+" || first === "-" || first === "@" || first === "\t" || first === "\r";
 }
 
 async function runWithRetries<T>(work: () => Promise<T>, retries = 2): Promise<T> {

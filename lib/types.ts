@@ -113,6 +113,7 @@ export interface SessionState {
   answers: Record<string, StoredAnswer>;
   history: string[];
   branchTrace: string[];
+  expiresAt: string;
   createdAt: string;
   updatedAt: string;
 }
