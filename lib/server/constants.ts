@@ -19,11 +19,20 @@ export const PUBLIC_API_CORS_ORIGINS = readCsvEnv("PUBLIC_API_CORS_ORIGINS");
 export const DB_TARGET_TEST_ALLOWED_HOSTS = readCsvEnv("DB_TARGET_TEST_ALLOWED_HOSTS");
 export const DB_TARGET_TEST_ALLOW_PRIVATE = process.env.DB_TARGET_TEST_ALLOW_PRIVATE === "1";
 
-export const CREDENTIAL_KEY = requireMinLengthSecret(
-  "CREDENTIAL_ENCRYPTION_KEY",
-  32,
-  "test-credential-encryption-key-32-bytes"
-);
+let cachedCredentialKey: string | null = null;
+
+export function credentialEncryptionKey() {
+  if (cachedCredentialKey) {
+    return cachedCredentialKey;
+  }
+
+  cachedCredentialKey = requireMinLengthSecret(
+    "CREDENTIAL_ENCRYPTION_KEY",
+    32,
+    "test-credential-encryption-key-32-bytes"
+  );
+  return cachedCredentialKey;
+}
 
 export function adminLoginPassword() {
   return requireMinLengthSecret("ADMIN_LOGIN_PASSWORD", 1, "test-admin-password");

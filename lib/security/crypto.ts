@@ -1,11 +1,11 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
-import { CREDENTIAL_KEY } from "@/lib/server/constants";
+import { credentialEncryptionKey } from "@/lib/server/constants";
 
 const IV_BYTES = 12;
 
 function keyMaterial() {
-  return createHash("sha256").update(CREDENTIAL_KEY).digest();
+  return createHash("sha256").update(credentialEncryptionKey()).digest();
 }
 
 export function encryptSecret(value: string) {
