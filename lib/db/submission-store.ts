@@ -13,7 +13,7 @@ import {
   getQuestionLabel,
   type SchemaLabelIndex
 } from "@/lib/label-index";
-import { type FormSchema, type SessionState } from "@/lib/types";
+import { type FormSchema, type SessionState, type QuestionType } from "@/lib/types";
 
 interface SubmissionFilterInput {
   status?: string | null;
@@ -198,6 +198,82 @@ export async function persistCompletedSubmission(session: SessionState, schema: 
   return {
     submissionId
   };
+}
+
+export async function getSubmissionById(workspaceId: string, formId: string, submissionId: string) {
+  if (!isSubmissionDbConfigured()) {
+    const submission = memorySubmissions.get(submissionId);
+    if (!submission || submission.workspaceId !== workspaceId || submission.formId !== formId) {
+      return null;
+    }
+    return submission;
+  }
+
+  const pools = await getReadableSubmissionPools(workspaceId);
+
+  for (const poolEntry of pools) {
+    const [rows] = await poolEntry.pool.execute<RowDataPacket[]>(
+      `
+        SELECT 
+          s.submission_id,
+          s.workspace_id,
+          s.form_id,
+          s.version_number,
+          s.status,
+          s.started_at,
+          s.completed_at,
+          s.branch_trace_json,
+          af.question_id,
+          af.question_type,
+          af.option_id,
+          af.text_value,
+          af.number_value,
+          af.flow_path,
+          af.answered_at
+        FROM submissions s
+        LEFT JOIN answer_facts af ON af.submission_id = s.submission_id
+        WHERE s.submission_id = ? AND s.workspace_id = ? AND s.form_id = ?
+      `,
+      [submissionId, workspaceId, formId]
+    );
+
+    if (rows.length === 0) {
+      continue;
+    }
+
+    const firstRow = rows[0];
+    const facts = rows
+      .filter((row) => row.question_id !== null)
+      .map((row) => ({
+        questionId: String(row.question_id),
+        questionType: String(row.question_type) as QuestionType,
+        optionId: row.option_id ? String(row.option_id) : null,
+        textValue: row.text_value ? String(row.text_value) : null,
+        numberValue:
+          row.number_value === null || row.number_value === undefined
+            ? null
+            : Number(row.number_value),
+        flowPath: String(row.flow_path),
+        answeredAt: new Date(String(row.answered_at)).toISOString()
+      }));
+
+    return {
+      submissionId: String(firstRow.submission_id),
+      workspaceId: String(firstRow.workspace_id),
+      formId: String(firstRow.form_id),
+      versionNumber: Number(firstRow.version_number),
+      status: String(firstRow.status) as "completed" | "in_progress",
+      startedAt: new Date(String(firstRow.started_at)).toISOString(),
+      completedAt: firstRow.completed_at
+        ? new Date(String(firstRow.completed_at)).toISOString()
+        : null,
+      branchTrace: safeArray(firstRow.branch_trace_json),
+      raw: [], // Not needed for detail view
+      facts
+    };
+  }
+
+  return null;
 }
 
 export async function listSubmissionsForForm(
