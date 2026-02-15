@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-import { exportSubmissionsCsv } from "@/lib/db/submission-store";
+import { exportSubmissionsCsv } from "@/lib/db/submission-export";
 import { getFormBundleForWorkspace } from "@/lib/server/forms";
 import { handleRouteError, jsonError, workspaceIdFromRequest } from "@/lib/server/http";
 

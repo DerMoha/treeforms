@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { exportSubmissionsCsv, persistCompletedSubmission } from "@/lib/db/submission-store";
+import { persistCompletedSubmission } from "@/lib/db/submission-store";
+import { exportSubmissionsCsv } from "@/lib/db/submission-export";
 import { isSubmissionDbConfigured } from "@/lib/db/platform";
 import {
   assertSafeDbTargetHost,
