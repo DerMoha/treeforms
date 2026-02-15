@@ -57,17 +57,13 @@ export function traverseSchema(
   const visitedFlows = new Set<string>();
 
   const walkFlow = (flow: FormSchema["mainFlow"], flowPath: string[]) => {
-    // Create a unique key for this flow position to detect circular references
     const flowKey = flowPath.join("/") || "root";
-    
-    // Prevent infinite recursion from circular references
     if (visitedFlows.has(flowKey)) {
       return;
     }
     visitedFlows.add(flowKey);
 
     for (const question of flow.questions) {
-      // Skip if we've already seen this question (prevent duplicates from cycles)
       if (reachableQuestionIds.has(question.questionId)) {
         continue;
       }
@@ -151,80 +147,160 @@ export function setAnswer(
   };
 }
 
-export function normalizeInputAnswer(question: QuestionNode, raw: unknown): AnswerValue {
-  if (question.type === "radio") {
-    if (typeof raw !== "string") {
-      throw new RuntimeValidationError("Radio answers must be a string");
-    }
-    const allowedValues = new Set(question.options?.map((option) => option.value) ?? []);
-    if (!allowedValues.has(raw)) {
-      throw new RuntimeValidationError("Invalid radio option value");
-    }
-    return raw;
+const QUESTION_HANDLERS: Record<
+  string,
+  {
+    normalize: (question: QuestionNode, raw: unknown) => AnswerValue;
+    getBranchOptions: (question: QuestionNode, value: AnswerValue) => OptionNode[];
+    generateFacts: (question: QuestionNode, answer: StoredAnswer, flowPath: string) => AnswerFact[];
   }
-
-  if (question.type === "checkbox") {
-    if (!Array.isArray(raw)) {
-      throw new RuntimeValidationError("Checkbox answers must be an array");
-    }
-
-    const allowedValues = new Set(question.options?.map((option) => option.value) ?? []);
-    const unique = Array.from(
-      new Set(
-        raw.map((entry) => {
-          if (typeof entry !== "string") {
-            throw new RuntimeValidationError("Checkbox array values must be strings");
-          }
-          return entry;
-        })
-      )
-    );
-
-    for (const value of unique) {
-      if (!allowedValues.has(value)) {
-        throw new RuntimeValidationError("Invalid checkbox option value");
+> = {
+  radio: {
+    normalize: (question, raw) => {
+      if (typeof raw !== "string") {
+        throw new RuntimeValidationError("Radio answers must be a string");
       }
+      const allowedValues = new Set(question.options?.map((option) => option.value) ?? []);
+      if (!allowedValues.has(raw)) {
+        throw new RuntimeValidationError("Invalid radio option value");
+      }
+      return raw;
+    },
+    getBranchOptions: (question, value) => {
+      if (typeof value !== "string" || !question.options) {
+        return [];
+      }
+      const option = question.options.find((entry) => entry.value === value);
+      return option ? [option] : [];
+    },
+    generateFacts: (question, answer, flowPath) => {
+      const option = question.options?.find((entry) => entry.value === answer.value);
+      return [
+        {
+          questionId: answer.questionId,
+          questionType: question.type,
+          optionId: option?.optionId ?? null,
+          textValue: typeof answer.value === "string" ? answer.value : null,
+          numberValue: null,
+          flowPath,
+          answeredAt: answer.answeredAt
+        }
+      ];
     }
-
-    return unique;
-  }
-
-  if (question.type === "text") {
-    if (typeof raw !== "string") {
-      throw new RuntimeValidationError("Text answers must be a string");
+  },
+  checkbox: {
+    normalize: (question, raw) => {
+      if (!Array.isArray(raw)) {
+        throw new RuntimeValidationError("Checkbox answers must be an array");
+      }
+      const allowedValues = new Set(question.options?.map((option) => option.value) ?? []);
+      const unique = Array.from(
+        new Set(
+          raw.map((entry) => {
+            if (typeof entry !== "string") {
+              throw new RuntimeValidationError("Checkbox array values must be strings");
+            }
+            return entry;
+          })
+        )
+      );
+      for (const value of unique) {
+        if (!allowedValues.has(value)) {
+          throw new RuntimeValidationError("Invalid checkbox option value");
+        }
+      }
+      return unique;
+    },
+    getBranchOptions: (question, value) => {
+      if (!Array.isArray(value) || !question.options) {
+        return [];
+      }
+      const selected = new Set(value);
+      return question.options.filter((option) => selected.has(option.value));
+    },
+    generateFacts: (question, answer, flowPath) => {
+      const selectedValues = Array.isArray(answer.value) ? answer.value : [];
+      return selectedValues.map((selected) => {
+        const option = question.options?.find((entry) => entry.value === selected);
+        return {
+          questionId: answer.questionId,
+          questionType: question.type,
+          optionId: option?.optionId ?? null,
+          textValue: String(selected),
+          numberValue: null,
+          flowPath,
+          answeredAt: answer.answeredAt
+        };
+      });
     }
-
-    const value = raw.trim();
-    const minLen = question.validation?.minLen;
-    const maxLen = question.validation?.maxLen;
-
-    if (minLen !== undefined && value.length < minLen) {
-      throw new RuntimeValidationError(`Text answer must be at least ${minLen} characters`);
-    }
-
-    if (maxLen !== undefined && value.length > maxLen) {
-      throw new RuntimeValidationError(`Text answer must be at most ${maxLen} characters`);
-    }
-
-    return value;
+  },
+  text: {
+    normalize: (question, raw) => {
+      if (typeof raw !== "string") {
+        throw new RuntimeValidationError("Text answers must be a string");
+      }
+      const value = raw.trim();
+      const minLen = question.validation?.minLen;
+      const maxLen = question.validation?.maxLen;
+      if (minLen !== undefined && value.length < minLen) {
+        throw new RuntimeValidationError(`Text answer must be at least ${minLen} characters`);
+      }
+      if (maxLen !== undefined && value.length > maxLen) {
+        throw new RuntimeValidationError(`Text answer must be at most ${maxLen} characters`);
+      }
+      return value;
+    },
+    getBranchOptions: () => [],
+    generateFacts: (question, answer, flowPath) => [
+      {
+        questionId: answer.questionId,
+        questionType: question.type,
+        optionId: null,
+        textValue: typeof answer.value === "string" ? answer.value : null,
+        numberValue: null,
+        flowPath,
+        answeredAt: answer.answeredAt
+      }
+    ]
+  },
+  number: {
+    normalize: (question, raw) => {
+      if (typeof raw !== "number" || Number.isNaN(raw)) {
+        throw new RuntimeValidationError("Number answers must be numeric");
+      }
+      const min = question.validation?.min;
+      const max = question.validation?.max;
+      if (min !== undefined && raw < min) {
+        throw new RuntimeValidationError(`Number answer must be >= ${min}`);
+      }
+      if (max !== undefined && raw > max) {
+        throw new RuntimeValidationError(`Number answer must be <= ${max}`);
+      }
+      return raw;
+    },
+    getBranchOptions: () => [],
+    generateFacts: (question, answer, flowPath) => [
+      {
+        questionId: answer.questionId,
+        questionType: question.type,
+        optionId: null,
+        textValue: null,
+        numberValue: typeof answer.value === "number" ? answer.value : null,
+        flowPath,
+        answeredAt: answer.answeredAt
+      }
+    ]
   }
+};
 
-  if (typeof raw !== "number" || Number.isNaN(raw)) {
-    throw new RuntimeValidationError("Number answers must be numeric");
-  }
+export function normalizeInputAnswer(question: QuestionNode, raw: unknown): AnswerValue {
+  const handler = QUESTION_HANDLERS[question.type] || QUESTION_HANDLERS.number;
+  return handler.normalize(question, raw);
+}
 
-  const min = question.validation?.min;
-  const max = question.validation?.max;
-
-  if (min !== undefined && raw < min) {
-    throw new RuntimeValidationError(`Number answer must be >= ${min}`);
-  }
-
-  if (max !== undefined && raw > max) {
-    throw new RuntimeValidationError(`Number answer must be <= ${max}`);
-  }
-
-  return raw;
+function selectedBranchOptions(question: QuestionNode, value: AnswerValue): OptionNode[] {
+  const handler = QUESTION_HANDLERS[question.type];
+  return handler ? handler.getBranchOptions(question, value) : [];
 }
 
 export function findFirstUnanswered(
@@ -308,59 +384,8 @@ export function questionFacts(
       flowPath
     });
 
-    if (question.type === "radio") {
-      const option = question.options?.find((entry) => entry.value === answer.value);
-      facts.push({
-        questionId: answer.questionId,
-        questionType: question.type,
-        optionId: option?.optionId ?? null,
-        textValue: typeof answer.value === "string" ? answer.value : null,
-        numberValue: null,
-        flowPath,
-        answeredAt: answer.answeredAt
-      });
-      continue;
-    }
-
-    if (question.type === "checkbox") {
-      const selectedValues = Array.isArray(answer.value) ? answer.value : [];
-      for (const selected of selectedValues) {
-        const option = question.options?.find((entry) => entry.value === selected);
-        facts.push({
-          questionId: answer.questionId,
-          questionType: question.type,
-          optionId: option?.optionId ?? null,
-          textValue: selected,
-          numberValue: null,
-          flowPath,
-          answeredAt: answer.answeredAt
-        });
-      }
-      continue;
-    }
-
-    if (question.type === "text") {
-      facts.push({
-        questionId: answer.questionId,
-        questionType: question.type,
-        optionId: null,
-        textValue: typeof answer.value === "string" ? answer.value : null,
-        numberValue: null,
-        flowPath,
-        answeredAt: answer.answeredAt
-      });
-      continue;
-    }
-
-    facts.push({
-      questionId: answer.questionId,
-      questionType: question.type,
-      optionId: null,
-      textValue: null,
-      numberValue: typeof answer.value === "number" ? answer.value : null,
-      flowPath,
-      answeredAt: answer.answeredAt
-    });
+    const handler = QUESTION_HANDLERS[question.type] || QUESTION_HANDLERS.number;
+    facts.push(...handler.generateFacts(question, answer, flowPath));
   }
 
   return {
@@ -396,30 +421,4 @@ function sanitizeAnswerMap(
   }
 
   return sanitized;
-}
-
-function selectedBranchOptions(question: QuestionNode, value: AnswerValue): OptionNode[] {
-  if (!question.options?.length) {
-    return [];
-  }
-
-  if (question.type === "radio") {
-    if (typeof value !== "string") {
-      return [];
-    }
-
-    const option = question.options.find((entry) => entry.value === value);
-    return option ? [option] : [];
-  }
-
-  if (question.type === "checkbox") {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-
-    const selected = new Set(value);
-    return question.options.filter((option) => selected.has(option.value));
-  }
-
-  return [];
 }
