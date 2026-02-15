@@ -290,14 +290,9 @@ export function PublicFormRunner({ slug, version, resumeTokenFromQuery }: Props)
               Question {current.index + 1} of {runtime.totalCount}
             </span>
             {current.flowBreadcrumbs.length > 0 ? (
-              <div className="runtime-breadcrumbs">
-                <span className="badge">Follow-up Context</span>
-                <p className="helper-text runtime-breadcrumbs-text">
-                  {current.flowBreadcrumbs
-                    .map((entry) => `${entry.questionLabel} -> ${entry.optionLabel}`)
-                    .join(" > ")}
-                </p>
-              </div>
+              <p className="runtime-branch-header">
+                {current.flowBreadcrumbs.map((entry) => entry.optionLabel).join(" > ")}
+              </p>
             ) : null}
 
             <QuestionInput question={current.question} value={draft} onChange={setDraft} />
