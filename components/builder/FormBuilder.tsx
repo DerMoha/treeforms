@@ -426,9 +426,24 @@ export function FormBuilder({ formId }: Props) {
           </Link>
 
           {publishedLink ? (
-            <Link className="button-secondary" href={publishedLink}>
-              Open Latest Runtime
-            </Link>
+            <>
+              <Link className="button-secondary" href={publishedLink}>
+                Open Latest Runtime
+              </Link>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={() => {
+                  const url = `${window.location.origin}${publishedLink}`;
+                  navigator.clipboard.writeText(url).then(() => {
+                    setToast("URL copied to clipboard!");
+                    setTimeout(() => setToast(null), 2000);
+                  });
+                }}
+              >
+                Copy URL
+              </button>
+            </>
           ) : null}
         </div>
 

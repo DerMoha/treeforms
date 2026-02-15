@@ -142,8 +142,19 @@ export function BuilderHome() {
   return (
     <main className="container page-stack">
       <section className="card page-card">
-        <span className="badge">Builder</span>
-        <h1 className="page-card-title">Forms</h1>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <span className="badge">Builder</span>
+            <h1 className="page-card-title">Forms</h1>
+          </div>
+          <Link
+            href="/builder/settings"
+            className="button-secondary"
+            style={{ textDecoration: "none" }}
+          >
+            Settings
+          </Link>
+        </div>
         <p className="page-card-subtitle">
           Create a form, edit branch paths, publish immutable versions, and collect responses.
         </p>
