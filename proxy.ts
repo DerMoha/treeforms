@@ -99,7 +99,9 @@ function isProtectedPath(pathname: string) {
     pathname === "/api/forms" ||
     pathname.startsWith("/api/forms/") ||
     pathname === "/api/workspaces" ||
-    pathname.startsWith("/api/workspaces/")
+    pathname.startsWith("/api/workspaces/") ||
+    pathname === "/api/settings" ||
+    pathname.startsWith("/api/settings/")
   );
 }
 
