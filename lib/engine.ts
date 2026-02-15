@@ -54,9 +54,24 @@ export function traverseSchema(
   const sequence: RuntimeQuestion[] = [];
   const reachableQuestionIds = new Set<string>();
   const branchTrace: string[] = [];
+  const visitedFlows = new Set<string>();
 
   const walkFlow = (flow: FormSchema["mainFlow"], flowPath: string[]) => {
+    // Create a unique key for this flow position to detect circular references
+    const flowKey = flowPath.join("/") || "root";
+    
+    // Prevent infinite recursion from circular references
+    if (visitedFlows.has(flowKey)) {
+      return;
+    }
+    visitedFlows.add(flowKey);
+
     for (const question of flow.questions) {
+      // Skip if we've already seen this question (prevent duplicates from cycles)
+      if (reachableQuestionIds.has(question.questionId)) {
+        continue;
+      }
+
       sequence.push({
         question,
         index: sequence.length,
