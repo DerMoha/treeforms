@@ -55,3 +55,17 @@ export const loginInputSchema = z.object({
   password: z.string().min(1).max(2048),
   next: z.string().trim().max(1024).optional()
 });
+
+export const platformDbConfigSchema = z.object({
+  mode: z.enum(["env-var", "mysql", "sqlite"]),
+  host: z.string().trim().max(255).optional(),
+  port: z.coerce.number().int().min(1).max(65_535).optional(),
+  database: z.string().trim().max(255).optional(),
+  username: z.string().trim().max(255).optional(),
+  password: z.string().max(4096).optional(),
+  sslMode: z.enum(["disabled", "preferred", "required"]).optional(),
+  sslCaCert: z.string().max(65535).optional(),
+  sslClientCert: z.string().max(65535).optional(),
+  sslClientKey: z.string().max(65535).optional(),
+  sqlitePath: z.string().trim().max(1024).optional()
+});
