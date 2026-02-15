@@ -9,6 +9,7 @@ import {
 let appPool: Pool | null = null;
 let appTablesEnsured = false;
 let submissionTablesEnsured = false;
+let platformSubmissionPool: Pool | null = null;
 const externalPools = new Map<string, Pool>();
 const CONNECT_TIMEOUT_MS = 5000;
 
@@ -33,13 +34,79 @@ export function getAppPool() {
 }
 
 export function getPlatformSubmissionPool() {
+  // Return cached pool if available
+  if (platformSubmissionPool) {
+    return platformSubmissionPool;
+  }
+
   const url = PLATFORM_SUBMISSION_DB_URL || APP_DB_URL;
 
   if (!url) {
     throw new Error("SUBMISSION_DATABASE_URL (or APP_DATABASE_URL) is required.");
   }
 
-  return getExternalPool(url);
+  platformSubmissionPool = getExternalPool(url);
+  return platformSubmissionPool;
+}
+
+export function invalidatePlatformSubmissionPool() {
+  if (platformSubmissionPool) {
+    platformSubmissionPool.end().catch(() => {
+      // Ignore cleanup errors
+    });
+    platformSubmissionPool = null;
+  }
+  submissionTablesEnsured = false;
+}
+
+export function getConfiguredSubmissionPool(config: {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  databaseName: string;
+  ssl?: {
+    mode: "disabled" | "preferred" | "required";
+    ca?: string;
+    cert?: string;
+    key?: string;
+  };
+}) {
+  const baseUrl = buildMysqlUrl({
+    host: config.host,
+    port: config.port,
+    user: config.user,
+    password: config.password,
+    databaseName: config.databaseName
+  });
+
+  if (!config.ssl || config.ssl.mode === "disabled") {
+    return createPool({
+      uri: baseUrl,
+      connectTimeout: CONNECT_TIMEOUT_MS
+    });
+  }
+
+  // Build connection options with SSL
+  const sslOptions: Record<string, unknown> = {
+    rejectUnauthorized: config.ssl.mode === "required"
+  };
+
+  if (config.ssl.ca) {
+    sslOptions.ca = config.ssl.ca;
+  }
+  if (config.ssl.cert) {
+    sslOptions.cert = config.ssl.cert;
+  }
+  if (config.ssl.key) {
+    sslOptions.key = config.ssl.key;
+  }
+
+  return createPool({
+    uri: baseUrl,
+    connectTimeout: CONNECT_TIMEOUT_MS,
+    ssl: sslOptions
+  });
 }
 
 export function getExternalPool(url: string) {
@@ -63,12 +130,25 @@ export function createEphemeralExternalPool(url: string, connectTimeout = CONNEC
   });
 }
 
+export async function ensurePlatformSettingsTable(pool: Pool) {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS platform_settings (
+      key_name VARCHAR(128) PRIMARY KEY,
+      value_encrypted LONGTEXT NULL,
+      value_plain LONGTEXT NULL,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
+}
+
 export async function ensureAppTables() {
   if (appTablesEnsured) {
     return;
   }
 
   const pool = getAppPool();
+  
+  await ensurePlatformSettingsTable(pool);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (

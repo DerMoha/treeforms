@@ -62,6 +62,13 @@ interface DbTargetRow extends RowDataPacket {
   last_tested_at: string | null;
 }
 
+interface PlatformSettingRow extends RowDataPacket {
+  key_name: string;
+  value_encrypted: string | null;
+  value_plain: string | null;
+  updated_at: string;
+}
+
 interface MemoryAuditEvent {
   id: string;
   workspaceId: string;
@@ -1256,4 +1263,144 @@ function serializeMemoryState(): SerializedMemoryState {
     dbTargets: Array.from(memoryState.dbTargets.entries()),
     auditEvents: [...memoryState.auditEvents]
   };
+}
+
+export type PlatformDbMode = "env-var" | "mysql" | "sqlite";
+
+export interface PlatformDbConfig {
+  mode: PlatformDbMode;
+  host?: string;
+  port?: number;
+  database?: string;
+  username?: string;
+  password?: string;
+  sslMode?: "disabled" | "preferred" | "required";
+  sslCaCert?: string;
+  sslClientCert?: string;
+  sslClientKey?: string;
+  sqlitePath?: string;
+}
+
+const PLATFORM_DB_CONFIG_KEY = "platform_db_config";
+
+export async function getPlatformSetting(key: string): Promise<string | null> {
+  if (!isAppDbConfigured()) {
+    return null;
+  }
+
+  await ensureAppTables();
+
+  const pool = getAppPool();
+  const [rows] = await pool.execute<PlatformSettingRow[]>(
+    `
+      SELECT key_name, value_encrypted, value_plain, updated_at
+      FROM platform_settings
+      WHERE key_name = ?
+      LIMIT 1
+    `,
+    [key]
+  );
+
+  const row = rows[0];
+  if (!row) {
+    return null;
+  }
+
+  if (row.value_encrypted) {
+    return decryptSecret(row.value_encrypted);
+  }
+
+  return row.value_plain;
+}
+
+export async function setPlatformSetting(
+  key: string,
+  value: string,
+  encrypt = false
+): Promise<void> {
+  if (!isAppDbConfigured()) {
+    throw new Error("Cannot save platform settings without a configured application database.");
+  }
+
+  await ensureAppTables();
+
+  const pool = getAppPool();
+  await pool.execute(
+    `
+      INSERT INTO platform_settings (key_name, value_encrypted, value_plain, updated_at)
+      VALUES (?, ?, ?, NOW())
+      ON DUPLICATE KEY UPDATE
+        value_encrypted = VALUES(value_encrypted),
+        value_plain = VALUES(value_plain),
+        updated_at = VALUES(updated_at)
+    `,
+    [key, encrypt ? encryptSecret(value) : null, encrypt ? null : value]
+  );
+}
+
+export async function getPlatformDbConfig(): Promise<PlatformDbConfig | null> {
+  const value = await getPlatformSetting(PLATFORM_DB_CONFIG_KEY);
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(value) as PlatformDbConfig;
+  } catch {
+    return null;
+  }
+}
+
+export async function setPlatformDbConfig(config: PlatformDbConfig): Promise<void> {
+  const value = JSON.stringify(config);
+  await setPlatformSetting(PLATFORM_DB_CONFIG_KEY, value, true);
+}
+
+export async function testPlatformDbConnection(config: PlatformDbConfig): Promise<{ ok: boolean; error?: string }> {
+  if (config.mode === "sqlite") {
+    return { ok: true };
+  }
+
+  if (config.mode === "env-var") {
+    const { PLATFORM_SUBMISSION_DB_URL, APP_DB_URL } = await import("@/lib/server/constants");
+    const url = PLATFORM_SUBMISSION_DB_URL || APP_DB_URL;
+    if (!url) {
+      return { ok: false, error: "No SUBMISSION_DATABASE_URL or APP_DATABASE_URL environment variable is set." };
+    }
+
+    try {
+      const { createEphemeralExternalPool, pingPool } = await import("@/lib/db/platform");
+      const pool = createEphemeralExternalPool(url, 4000);
+      await pingPool(pool);
+      await pool.end();
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  if (!config.host || !config.port || !config.database || !config.username) {
+    return { ok: false, error: "Missing required connection parameters." };
+  }
+
+  try {
+    const { createEphemeralExternalPool, pingPool, ensureSubmissionTables } = await import("@/lib/db/platform");
+    const { buildMysqlUrl } = await import("@/lib/db/platform");
+    
+    const url = buildMysqlUrl({
+      host: config.host,
+      port: config.port,
+      user: config.username,
+      password: config.password || "",
+      databaseName: config.database
+    });
+
+    const pool = createEphemeralExternalPool(url, 4000);
+    await pingPool(pool);
+    await ensureSubmissionTables(pool);
+    await pool.end();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
