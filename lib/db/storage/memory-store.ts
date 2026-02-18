@@ -1,6 +1,6 @@
 import { makeId, slugify } from "@/lib/ids";
 import { createEmptySchema, validateSchema } from "@/lib/schema";
-import { encryptSecret } from "@/lib/security/crypto";
+import { encryptSecret, decryptSecret } from "@/lib/security/crypto";
 import { DEFAULT_WORKSPACE_NAME, RESPONDENT_SESSION_TTL_SECONDS } from "@/lib/server/constants";
 import { readLocalJson, writeLocalJson } from "@/lib/db/local-sqlite";
 import {
@@ -28,6 +28,7 @@ import {
 } from "@/lib/types";
 
 const APP_STORE_STATE_KEY = "treeforms.app-store.v1";
+const PLATFORM_SETTINGS_KEY = "treeforms.platform-settings.v1";
 
 interface MemoryAuditEvent {
   id: string;
@@ -530,12 +531,26 @@ class MemoryAuditStorage implements AuditStorage {
 }
 
 class MemoryPlatformSettingsStorage implements PlatformSettingsStorage {
-  async get(): Promise<string | null> {
-    return null;
+  async get(key: string): Promise<string | null> {
+    const store = readLocalJson<Record<string, { value: string; encrypted: boolean }>>(PLATFORM_SETTINGS_KEY);
+    if (!store || !store[key]) {
+      return null;
+    }
+
+    const entry = store[key];
+    if (entry.encrypted) {
+      return decryptSecret(entry.value);
+    }
+    return entry.value;
   }
 
-  async set(): Promise<void> {
-    throw new Error("Cannot save platform settings without a configured application database.");
+  async set(key: string, value: string, encrypt: boolean): Promise<void> {
+    const store = readLocalJson<Record<string, { value: string; encrypted: boolean }>>(PLATFORM_SETTINGS_KEY) ?? {};
+    store[key] = {
+      value: encrypt ? encryptSecret(value) : value,
+      encrypted: encrypt
+    };
+    writeLocalJson(PLATFORM_SETTINGS_KEY, store);
   }
 }
 
