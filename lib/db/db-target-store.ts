@@ -1,27 +1,24 @@
 import { type DbTargetConfig, type DbTargetInput } from "@/lib/types";
 import { getStorage } from "@/lib/db/storage";
-import { 
-  createEphemeralExternalPool, 
-  ensureSubmissionTables, 
-  getExternalPool, 
-  getPlatformSubmissionPool, 
-  isSubmissionDbConfigured, 
-  pingPool, 
-  buildMysqlUrl 
+import {
+  getConfiguredSubmissionPool,
+  ensureSubmissionTables,
+  getPlatformSubmissionPool,
+  isSubmissionDbConfigured,
+  pingPool
 } from "@/lib/db/platform";
 import { decryptSecret } from "@/lib/security/crypto";
 import { initializeWorkspace } from "./form-store";
 
 export async function testDbTarget(input: DbTargetInput) {
-  const url = buildMysqlUrl({
+  const pool = getConfiguredSubmissionPool({
     host: input.host,
     port: input.port,
     user: input.user,
     password: input.password,
-    databaseName: input.databaseName
+    databaseName: input.databaseName,
+    ssl: input.ssl
   });
-
-  const pool = createEphemeralExternalPool(url, 4000);
 
   try {
     await pingPool(pool);
@@ -36,17 +33,17 @@ export async function testDbTarget(input: DbTargetInput) {
 export async function setActiveDbTarget(workspaceId: string, input: DbTargetInput) {
   await initializeWorkspace(workspaceId);
 
-  const url = buildMysqlUrl({
+  const pool = getConfiguredSubmissionPool({
     host: input.host,
     port: input.port,
     user: input.user,
     password: input.password,
-    databaseName: input.databaseName
+    databaseName: input.databaseName,
+    ssl: input.ssl
   });
 
-  const externalPool = getExternalPool(url);
-  await pingPool(externalPool);
-  await ensureSubmissionTables(externalPool);
+  await pingPool(pool);
+  await ensureSubmissionTables(pool);
 
   const result = await getStorage().dbTargets.setActiveDbTarget(workspaceId, input);
 
@@ -79,15 +76,20 @@ export async function getSubmissionPoolForWorkspace(workspaceId: string) {
     };
   }
 
-  const url = buildMysqlUrl({
+  const pool = getConfiguredSubmissionPool({
     host: target.host,
     port: target.port,
     user: target.user,
     password: decryptSecret(target.passwordEncrypted),
-    databaseName: target.databaseName
+    databaseName: target.databaseName,
+    ssl: {
+      mode: target.sslMode,
+      ca: target.sslCaCert || undefined,
+      cert: target.sslClientCert || undefined,
+      key: target.sslClientKey || undefined,
+    }
   });
 
-  const pool = getExternalPool(url);
   await ensureSubmissionTables(pool);
 
   return {
@@ -110,19 +112,24 @@ export async function getReadableSubmissionPools(workspaceId: string) {
 
   const target = await getActiveDbTarget(workspaceId);
   if (target && target.status === "healthy") {
-    const url = buildMysqlUrl({
+    const pool = getConfiguredSubmissionPool({
       host: target.host,
       port: target.port,
       user: target.user,
       password: decryptSecret(target.passwordEncrypted),
-      databaseName: target.databaseName
+      databaseName: target.databaseName,
+      ssl: {
+        mode: target.sslMode,
+        ca: target.sslCaCert || undefined,
+        cert: target.sslClientCert || undefined,
+        key: target.sslClientKey || undefined,
+      }
     });
 
-    const externalPool = getExternalPool(url);
-    await ensureSubmissionTables(externalPool);
+    await ensureSubmissionTables(pool);
 
-    if (externalPool !== platformPool) {
-      pools.push({ pool: externalPool, source: "external" });
+    if (pool !== platformPool) {
+      pools.push({ pool, source: "external" });
     }
   }
 

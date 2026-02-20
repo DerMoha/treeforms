@@ -11,6 +11,7 @@ let appTablesEnsured = false;
 let submissionTablesEnsured = false;
 let platformSubmissionPool: Pool | null = null;
 const externalPools = new Map<string, Pool>();
+const ensuredExternalPools = new WeakSet<Pool>();
 const CONNECT_TIMEOUT_MS = 5000;
 
 export function isAppDbConfigured() {
@@ -72,6 +73,16 @@ export function getConfiguredSubmissionPool(config: {
     key?: string;
   };
 }) {
+  const cacheKey = JSON.stringify({
+    ...config,
+    password: "***" // don't cache passwords in plain text keys, though it's internal
+  });
+
+  const existing = externalPools.get(cacheKey);
+  if (existing) {
+    return existing;
+  }
+
   const baseUrl = buildMysqlUrl({
     host: config.host,
     port: config.port,
@@ -81,10 +92,12 @@ export function getConfiguredSubmissionPool(config: {
   });
 
   if (!config.ssl || config.ssl.mode === "disabled") {
-    return createPool({
+    const pool = createPool({
       uri: baseUrl,
       connectTimeout: CONNECT_TIMEOUT_MS
     });
+    externalPools.set(cacheKey, pool);
+    return pool;
   }
 
   // Build connection options with SSL
@@ -102,11 +115,14 @@ export function getConfiguredSubmissionPool(config: {
     sslOptions.key = config.ssl.key;
   }
 
-  return createPool({
+  const pool = createPool({
     uri: baseUrl,
     connectTimeout: CONNECT_TIMEOUT_MS,
     ssl: sslOptions
   });
+
+  externalPools.set(cacheKey, pool);
+  return pool;
 }
 
 export function getExternalPool(url: string) {
@@ -147,7 +163,7 @@ export async function ensureAppTables() {
   }
 
   const pool = getAppPool();
-  
+
   await ensurePlatformSettingsTable(pool);
 
   await pool.query(`
@@ -221,6 +237,10 @@ export async function ensureAppTables() {
       user_name VARCHAR(255) NOT NULL,
       password_encrypted LONGTEXT NOT NULL,
       database_name VARCHAR(255) NOT NULL,
+      ssl_mode VARCHAR(32) NOT NULL DEFAULT 'disabled',
+      ssl_ca LONGTEXT NULL,
+      ssl_cert LONGTEXT NULL,
+      ssl_key LONGTEXT NULL,
       is_active BOOLEAN NOT NULL DEFAULT FALSE,
       status VARCHAR(32) NOT NULL DEFAULT 'unknown',
       last_error TEXT NULL,
@@ -265,7 +285,27 @@ export async function ensureAppTables() {
     )
   `);
 
+  await ensureDbTargetSslColumns(pool);
+
   appTablesEnsured = true;
+}
+
+async function ensureDbTargetSslColumns(pool: Pool) {
+  try {
+    await pool.query(`
+      ALTER TABLE db_targets 
+      ADD COLUMN ssl_mode VARCHAR(32) NOT NULL DEFAULT 'disabled',
+      ADD COLUMN ssl_ca LONGTEXT NULL,
+      ADD COLUMN ssl_cert LONGTEXT NULL,
+      ADD COLUMN ssl_key LONGTEXT NULL
+    `);
+  } catch (error) {
+    if (isDuplicateColumnError(error)) {
+      // Column already exists.
+    } else {
+      throw error;
+    }
+  }
 }
 
 async function ensureRespondentSessionExpiryColumn(pool: Pool) {
@@ -301,6 +341,10 @@ function isDuplicateColumnError(error: unknown) {
 
 export async function ensureSubmissionTables(pool: Pool) {
   if (submissionTablesEnsured && pool === getPlatformSubmissionPool()) {
+    return;
+  }
+
+  if (ensuredExternalPools.has(pool)) {
     return;
   }
 
@@ -364,6 +408,8 @@ export async function ensureSubmissionTables(pool: Pool) {
 
   if (pool === getPlatformSubmissionPool()) {
     submissionTablesEnsured = true;
+  } else {
+    ensuredExternalPools.add(pool);
   }
 }
 

@@ -54,6 +54,10 @@ interface DbTargetRow extends RowDataPacket {
   user_name: string;
   password_encrypted: string;
   database_name: string;
+  ssl_mode: string;
+  ssl_ca: string | null;
+  ssl_cert: string | null;
+  ssl_key: string | null;
   is_active: number;
   status: "healthy" | "unhealthy" | "unknown";
   last_error: string | null;
@@ -624,12 +628,16 @@ class DatabaseDbTargetStorage implements DbTargetStorage {
             user_name,
             password_encrypted,
             database_name,
+            ssl_mode,
+            ssl_ca,
+            ssl_cert,
+            ssl_key,
             is_active,
             status,
             last_tested_at,
             last_error
           )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, 'healthy', NOW(), NULL)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, 'healthy', NOW(), NULL)
         `,
         [
           targetId,
@@ -639,7 +647,11 @@ class DatabaseDbTargetStorage implements DbTargetStorage {
           input.port,
           input.user,
           encryptSecret(input.password),
-          input.databaseName
+          input.databaseName,
+          input.ssl?.mode || 'disabled',
+          input.ssl?.ca || null,
+          input.ssl?.cert || null,
+          input.ssl?.key || null
         ]
       );
 
@@ -670,6 +682,10 @@ class DatabaseDbTargetStorage implements DbTargetStorage {
           user_name,
           password_encrypted,
           database_name,
+          ssl_mode,
+          ssl_ca,
+          ssl_cert,
+          ssl_key,
           is_active,
           status,
           last_error,
@@ -696,6 +712,10 @@ class DatabaseDbTargetStorage implements DbTargetStorage {
       user: row.user_name,
       passwordEncrypted: row.password_encrypted,
       databaseName: row.database_name,
+      sslMode: row.ssl_mode as DbTargetConfig["sslMode"],
+      sslCaCert: row.ssl_ca,
+      sslClientCert: row.ssl_cert,
+      sslClientKey: row.ssl_key,
       isActive: Boolean(row.is_active),
       status: row.status,
       lastError: row.last_error,

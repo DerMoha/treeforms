@@ -72,18 +72,22 @@ export async function testPlatformDbConnection(config: PlatformDbConfig): Promis
   }
 
   try {
-    const { createEphemeralExternalPool, pingPool, ensureSubmissionTables } = await import("@/lib/db/platform");
-    const { buildMysqlUrl } = await import("@/lib/db/platform");
-    
-    const url = buildMysqlUrl({
+    const { getConfiguredSubmissionPool, pingPool, ensureSubmissionTables } = await import("@/lib/db/platform");
+
+    const pool = getConfiguredSubmissionPool({
       host: config.host,
       port: config.port,
       user: config.username,
       password: config.password || "",
-      databaseName: config.database
+      databaseName: config.database,
+      ssl: {
+        mode: config.sslMode || "disabled",
+        ca: config.sslCaCert,
+        cert: config.sslClientCert,
+        key: config.sslClientKey
+      }
     });
 
-    const pool = createEphemeralExternalPool(url, 4000);
     await pingPool(pool);
     await ensureSubmissionTables(pool);
     await pool.end();

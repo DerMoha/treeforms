@@ -62,6 +62,12 @@ export interface DbTargetInput {
   user: string;
   password: string;
   databaseName: string;
+  ssl?: {
+    mode: "disabled" | "preferred" | "required";
+    ca?: string;
+    cert?: string;
+    key?: string;
+  };
 }
 
 export interface DbTargetConfig {
@@ -73,6 +79,10 @@ export interface DbTargetConfig {
   user: string;
   passwordEncrypted: string;
   databaseName: string;
+  sslMode: "disabled" | "preferred" | "required";
+  sslCaCert?: string | null;
+  sslClientCert?: string | null;
+  sslClientKey?: string | null;
   isActive: boolean;
   status: "healthy" | "unhealthy" | "unknown";
   lastError?: string | null;
