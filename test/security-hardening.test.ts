@@ -16,6 +16,8 @@ describe("security hardening", () => {
   it("blocks private or localhost DB target hosts", async () => {
     await expect(assertSafeDbTargetHost("127.0.0.1")).rejects.toThrow();
     await expect(assertSafeDbTargetHost("localhost")).rejects.toThrow();
+    await expect(assertSafeDbTargetHost("::ffff:127.0.0.1")).rejects.toThrow();
+    await expect(assertSafeDbTargetHost("::ffff:169.254.169.254")).rejects.toThrow();
     await expect(assertSafeDbTargetHost("8.8.8.8")).resolves.toEqual({
       host: "8.8.8.8",
       resolvedAddresses: ["8.8.8.8"]

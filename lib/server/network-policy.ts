@@ -183,6 +183,11 @@ function isPrivateIpv4(address: string) {
 function isPrivateIpv6(address: string) {
   const normalized = address.toLowerCase();
 
+  if (normalized.startsWith("::ffff:")) {
+    const ipv4Part = normalized.substring(7);
+    return isPrivateIpv4(ipv4Part);
+  }
+
   if (normalized === "::1" || normalized === "::") {
     return true;
   }
