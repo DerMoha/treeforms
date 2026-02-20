@@ -9,7 +9,15 @@ import { applyRateLimit } from "@/lib/server/rate-limit";
 
 export async function POST(request: NextRequest) {
   try {
-    await applyRateLimit(request, { scope: "settings", limit: 10, windowMs: 60_000 });
+    const rateLimit = applyRateLimit(request, { scope: "settings", limit: 10, windowMs: 60_000 });
+
+    if (!rateLimit.allowed) {
+      return jsonError("Rate limit exceeded", 429, null, {
+        headers: {
+          "retry-after": String(rateLimit.retryAfterSeconds)
+        }
+      });
+    }
 
     const session = readAdminSession(request);
     if (!session) {

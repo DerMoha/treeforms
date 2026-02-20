@@ -125,16 +125,21 @@ export function isMutationMethod(method: string) {
 }
 
 export function requestIp(request: Pick<NextRequest, "headers">) {
+  const customRequest = request as { ip?: string };
+  if (customRequest.ip) {
+    return customRequest.ip;
+  }
+
   if (TRUST_X_FORWARDED_FOR) {
     const forwarded = forwardedForFirstIp(request.headers.get("x-forwarded-for"));
     if (forwarded) {
       return forwarded;
     }
-  }
 
-  const realIp = normalizeHeaderValue(request.headers.get("x-real-ip"));
-  if (realIp) {
-    return realIp;
+    const realIp = normalizeHeaderValue(request.headers.get("x-real-ip"));
+    if (realIp) {
+      return realIp;
+    }
   }
 
   return "0.0.0.0";

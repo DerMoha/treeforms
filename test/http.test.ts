@@ -46,7 +46,7 @@ describe("server http helpers", () => {
     ).resolves.toEqual({ value: 42 });
   });
 
-  it("ignores x-forwarded-for by default and uses x-real-ip", async () => {
+  it("ignores x-forwarded-for and x-real-ip by default", async () => {
     const { requestIp } = await importHttpModule();
     const ip = requestIp({
       headers: new Headers({
@@ -55,7 +55,7 @@ describe("server http helpers", () => {
       })
     } as never);
 
-    expect(ip).toBe("198.51.100.25");
+    expect(ip).toBe("0.0.0.0");
   });
 
   it("uses x-forwarded-for when TRUST_X_FORWARDED_FOR=1", async () => {
@@ -68,6 +68,17 @@ describe("server http helpers", () => {
     } as never);
 
     expect(ip).toBe("203.0.113.11");
+  });
+
+  it("uses x-real-ip when TRUST_X_FORWARDED_FOR=1 and x-forwarded-for is missing", async () => {
+    const { requestIp } = await importHttpModule("1");
+    const ip = requestIp({
+      headers: new Headers({
+        "x-real-ip": "198.51.100.25"
+      })
+    } as never);
+
+    expect(ip).toBe("198.51.100.25");
   });
 });
 
