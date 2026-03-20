@@ -1115,6 +1115,41 @@ button:focus-visible,
   font-size: 0.8rem;
 }
 
+.flow-outline-item.tree-item {
+  position: relative;
+}
+
+.flow-outline-item.tree-item.has-tree-lines::before,
+.flow-outline-item.tree-item:not(.is-last)::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--depth, 1) * 14px - 7px);
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border);
+  pointer-events: none;
+}
+
+.flow-outline-item.tree-item::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--depth, 1) * 14px - 7px);
+  top: 50%;
+  width: 10px;
+  height: 1px;
+  background: var(--border);
+  pointer-events: none;
+}
+
+.flow-outline-item.tree-item.is-last::before {
+  bottom: 50%;
+}
+
+.flow-outline-item.tree-item:first-child:not(.has-tree-lines)::before {
+  display: none;
+}
+
 .flow-context-bar {
   padding: 0.95rem 1rem;
   display: flex;

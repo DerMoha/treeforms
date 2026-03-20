@@ -598,6 +598,7 @@ function FlowOutlineSidebar({ schema, activePath, onSelectPath }: FlowOutlineSid
   const activeId = pathKey(activePath);
   const mainNode = nodes[0];
   const branchNodes = nodes.filter((node) => node.path.length > 0);
+  const hasBranches = branchNodes.length > 0;
 
   return (
     <aside className="card flow-outline-card">
@@ -611,8 +612,9 @@ function FlowOutlineSidebar({ schema, activePath, onSelectPath }: FlowOutlineSid
 
         <button
           type="button"
-          className={`flow-outline-item${activeId === "main" ? " is-active" : ""}`}
+          className={`flow-outline-item tree-item${activeId === "main" ? " is-active" : ""}${hasBranches ? " has-tree-lines" : ""}`}
           onClick={() => onSelectPath([])}
+          style={{ "--depth": 0 } as React.CSSProperties}
         >
           <span className="flow-outline-row">
             <strong>Main flow</strong>
@@ -631,17 +633,13 @@ function FlowOutlineSidebar({ schema, activePath, onSelectPath }: FlowOutlineSid
               <button
                 key={node.id}
                 type="button"
-                className={`flow-outline-item${activeId === node.id ? " is-active" : ""}`}
+                className={`flow-outline-item tree-item${activeId === node.id ? " is-active" : ""}${node.isLastChild ? " is-last" : ""}`}
                 onClick={() => onSelectPath(node.path)}
-                style={{ marginLeft: `${Math.max(0, node.depth - 1) * 14}px` }}
+                style={{ marginLeft: `${Math.max(0, node.depth - 1) * 14}px`, "--depth": node.depth } as React.CSSProperties}
               >
                 <span className="flow-outline-row">
                   <strong>{node.title}</strong>
                   <span className="badge">{node.questionCount}</span>
-                </span>
-                <span className="flow-outline-meta">
-                  from {node.sourceQuestionLabel ?? "Question"}{" -> "}
-                  {node.sourceOptionLabel ?? "Option"}
                 </span>
               </button>
             ))
