@@ -10,6 +10,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [shakeKey, setShakeKey] = useState(0);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -36,14 +37,21 @@ export function LoginForm({ nextPath }: LoginFormProps) {
 
       window.location.href = payload.next || nextPath;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Unable to login");
+      const message = reason instanceof Error ? reason.message : "Unable to login";
+      setError(message);
+      setShakeKey((k) => k + 1);
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <form className="card page-card" onSubmit={onSubmit}>
+    <form
+      key={shakeKey}
+      className="card page-card scale-in"
+      onSubmit={onSubmit}
+      noValidate
+    >
       <span className="badge">Admin Login</span>
       <h1 className="page-card-title">Sign in to Treeforms Builder</h1>
       <p className="page-card-subtitle">
@@ -58,14 +66,24 @@ export function LoginForm({ nextPath }: LoginFormProps) {
           required
           value={password}
           onChange={(event) => setPassword(event.target.value)}
+          style={{ width: "100%" }}
         />
       </label>
 
-      {error ? <p className="state-text error">{error}</p> : null}
+      {error ? (
+        <p className="state-text error shake">{error}</p>
+      ) : null}
 
       <div className="inline-stack">
         <button type="submit" className="button-primary" disabled={submitting}>
-          {submitting ? "Signing in..." : "Sign in"}
+          {submitting ? (
+            <>
+              <span className="spinner" />
+              Signing in...
+            </>
+          ) : (
+            "Sign in"
+          )}
         </button>
       </div>
     </form>

@@ -276,6 +276,16 @@ export function PublicFormRunner({ slug, version, resumeTokenFromQuery }: Props)
       <section className="card page-card">
         <span className="badge">Hosted Runtime</span>
         <h1 className="page-card-title">{title}</h1>
+        <div className="runtime-progress">
+          <div
+            className="runtime-progress-fill progress-enter"
+            style={{
+              width: runtime.totalCount > 0
+                ? `${Math.round((runtime.answeredCount / runtime.totalCount) * 100)}%`
+                : "0%"
+            }}
+          />
+        </div>
         <p className="helper-text">{progressText}</p>
         <p className="mono-text">
           Resume link: <a href={resumeHref}>{resumeHref}</a>
@@ -285,35 +295,44 @@ export function PublicFormRunner({ slug, version, resumeTokenFromQuery }: Props)
       <section className="card page-card">
         {current ? (
           <>
-            <h2 className="section-title">{current.question.label || "Untitled question"}</h2>
-            <span className="helper-text">
-              Question {current.index + 1} of {runtime.totalCount}
-            </span>
-            {current.flowBreadcrumbs.length > 0 ? (
-              <p className="runtime-branch-header">
-                {current.flowBreadcrumbs.map((entry) => entry.optionLabel).join(" > ")}
-              </p>
-            ) : null}
+            <div className="fade-in" key={current.question.questionId}>
+              <h2 className="section-title">{current.question.label || "Untitled question"}</h2>
+              <span className="helper-text">
+                Question {current.index + 1} of {runtime.totalCount}
+              </span>
+              {current.flowBreadcrumbs.length > 0 ? (
+                <p className="runtime-branch-header">
+                  {current.flowBreadcrumbs.map((entry) => entry.optionLabel).join(" > ")}
+                </p>
+              ) : null}
 
-            <QuestionInput question={current.question} value={draft} onChange={setDraft} />
+              <QuestionInput question={current.question} value={draft} onChange={setDraft} />
 
-            <div className="inline-stack">
-              <button
-                type="button"
-                className="button-secondary"
-                onClick={() => navigate("back")}
-                disabled={saving}
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                className="button-primary"
-                onClick={submitAnswer}
-                disabled={saving}
-              >
-                {saving ? "Saving..." : "Save and Continue"}
-              </button>
+              <div className="inline-stack">
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => navigate("back")}
+                  disabled={saving}
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  className="button-primary"
+                  onClick={submitAnswer}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <>
+                      <span className="spinner" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save and Continue"
+                  )}
+                </button>
+              </div>
             </div>
           </>
         ) : runtime.status !== "completed" ? (
@@ -337,25 +356,37 @@ export function PublicFormRunner({ slug, version, resumeTokenFromQuery }: Props)
                 onClick={completeSession}
                 disabled={saving}
               >
-                {saving ? "Submitting..." : "Submit"}
+                {saving ? (
+                  <>
+                    <span className="spinner" />
+                    Submitting...
+                  </>
+                ) : (
+                  "Submit"
+                )}
               </button>
             </div>
           </>
         ) : (
-          <>
-            <h2 className="section-title">Thanks, submission received</h2>
+          <div className="completion-screen">
+            <div className="completion-checkmark">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M5 13l4 4L19 7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <h2 className="section-title" style={{ margin: 0 }}>Thanks, submission received</h2>
             <p className="helper-text">
               Submission ID: <strong>{finishedSubmissionId ?? `sub_${runtime.sessionToken}`}</strong>
             </p>
             <Link href="/builder" className="button-secondary">
               Back to Builder
             </Link>
-          </>
+          </div>
         )}
 
         {error ? <p className="state-text error">{error}</p> : null}
 
-        {branchPathDisplay.length > 0 ? (
+        {branchPathDisplay.length > 0 && current ? (
           <p className="helper-text">
             Current path: {branchPathDisplay.join(" > ")}
           </p>
@@ -378,7 +409,10 @@ function QuestionInput({
     return (
       <div className="choice-list">
         {(question.options ?? []).map((option) => (
-          <label key={option.optionId} className="choice-item">
+          <label
+            key={option.optionId}
+            className={`choice-option ${value === option.value ? "is-selected" : ""}`}
+          >
             <input
               type="radio"
               name={question.questionId}
@@ -399,7 +433,10 @@ function QuestionInput({
         {(question.options ?? []).map((option) => {
           const selected = values.includes(option.value);
           return (
-            <label key={option.optionId} className="choice-item">
+            <label
+              key={option.optionId}
+              className={`choice-option ${selected ? "is-selected" : ""}`}
+            >
               <input
                 type="checkbox"
                 checked={selected}

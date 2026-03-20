@@ -166,14 +166,7 @@ export default function DatabaseConfig({ initialSettings }: DatabaseConfigProps)
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-      <div
-        style={{
-          padding: "1rem",
-          border: "1px solid #d9d9d9",
-          borderRadius: "8px",
-          backgroundColor: "#fafafa"
-        }}
-      >
+      <div className="muted-card">
         <div><strong>Active backend:</strong> {currentSummary}</div>
         <div><strong>Config source:</strong> {initialSettings.isDefault ? "Default local SQLite" : "Saved in system settings"}</div>
         <div><strong>Last validated:</strong> {initialSettings.lastValidatedAt ?? "Never"}</div>
@@ -184,43 +177,47 @@ export default function DatabaseConfig({ initialSettings }: DatabaseConfigProps)
         )}
       </div>
 
-      <div>
-        <label style={{ display: "block", marginBottom: "0.5rem" }}>Backend</label>
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <input
-              type="radio"
-              name="dbMode"
-              value="sqlite"
-              checked={mode === "sqlite"}
-              onChange={() => setMode("sqlite")}
-            />
-            <span>SQLite</span>
-          </label>
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <input
-              type="radio"
-              name="dbMode"
-              value="mysql"
-              checked={mode === "mysql"}
-              onChange={() => setMode("mysql")}
-            />
-            <span>MySQL / MariaDB</span>
-          </label>
-        </div>
+      <div className="form-grid">
+        <label className="field">
+          <span className="field-label">Backend</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+            <label className="choice-option">
+              <input
+                type="radio"
+                name="dbMode"
+                value="sqlite"
+                checked={mode === "sqlite"}
+                onChange={() => setMode("sqlite")}
+              />
+              SQLite
+            </label>
+            <label className="choice-option">
+              <input
+                type="radio"
+                name="dbMode"
+                value="mysql"
+                checked={mode === "mysql"}
+                onChange={() => setMode("mysql")}
+              />
+              MySQL / MariaDB
+            </label>
+          </div>
+        </label>
       </div>
 
       {mode === "sqlite" && (
-        <div>
-          <label style={{ display: "block", marginBottom: "0.25rem" }}>SQLite File Path</label>
-          <input
-            type="text"
-            value={sqlitePath}
-            onChange={(event) => setSqlitePath(event.target.value)}
-            placeholder=".data/treeforms.sqlite"
-            style={{ width: "100%", padding: "0.5rem" }}
-          />
-          <p style={{ fontSize: "0.875rem", color: "#666", marginTop: "0.25rem" }}>
+        <div className="form-grid">
+          <label className="field">
+            <span className="field-label">SQLite File Path</span>
+            <input
+              type="text"
+              value={sqlitePath}
+              onChange={(event) => setSqlitePath(event.target.value)}
+              placeholder=".data/treeforms.sqlite"
+              style={{ width: "100%" }}
+            />
+          </label>
+          <p className="helper-text">
             Relative paths stay inside the workspace. The app will create the file if needed.
           </p>
         </div>
@@ -228,73 +225,73 @@ export default function DatabaseConfig({ initialSettings }: DatabaseConfigProps)
 
       {mode === "mysql" && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-            <div>
-              <label style={{ display: "block", marginBottom: "0.25rem" }}>Host</label>
+          <div className="form-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <label className="field">
+              <span className="field-label">Host</span>
               <input
                 type="text"
                 value={host}
                 onChange={(event) => setHost(event.target.value)}
-                style={{ width: "100%", padding: "0.5rem" }}
+                style={{ width: "100%" }}
               />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: "0.25rem" }}>Port</label>
+            </label>
+            <label className="field">
+              <span className="field-label">Port</span>
               <input
                 type="number"
                 value={port}
                 onChange={(event) => setPort(event.target.value)}
-                style={{ width: "100%", padding: "0.5rem" }}
+                style={{ width: "100%" }}
               />
-            </div>
+            </label>
           </div>
 
-          <div>
-            <label style={{ display: "block", marginBottom: "0.25rem" }}>Database Name</label>
+          <label className="field">
+            <span className="field-label">Database Name</span>
             <input
               type="text"
               value={database}
               onChange={(event) => setDatabase(event.target.value)}
-              style={{ width: "100%", padding: "0.5rem" }}
+              style={{ width: "100%" }}
             />
-          </div>
+          </label>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-            <div>
-              <label style={{ display: "block", marginBottom: "0.25rem" }}>Username</label>
+          <div className="form-grid" style={{ gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <label className="field">
+              <span className="field-label">Username</span>
               <input
                 type="text"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
-                style={{ width: "100%", padding: "0.5rem" }}
+                style={{ width: "100%" }}
               />
-            </div>
-            <div>
-              <label style={{ display: "block", marginBottom: "0.25rem" }}>Password</label>
+            </label>
+            <label className="field">
+              <span className="field-label">Password</span>
               <input
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder={initialSettings.secrets.hasPassword ? "Stored password will be reused" : "Optional"}
-                style={{ width: "100%", padding: "0.5rem" }}
+                style={{ width: "100%" }}
               />
-            </div>
+            </label>
           </div>
 
-          <div>
-            <label style={{ display: "block", marginBottom: "0.25rem" }}>SSL Mode</label>
+          <label className="field">
+            <span className="field-label">SSL Mode</span>
             <select
               value={sslMode}
               onChange={(event) =>
                 setSslMode(event.target.value as "disabled" | "preferred" | "required")
               }
-              style={{ width: "100%", padding: "0.5rem" }}
+              style={{ width: "100%" }}
             >
               <option value="disabled">Disabled</option>
               <option value="preferred">Preferred</option>
               <option value="required">Required</option>
             </select>
-          </div>
+          </label>
 
           {sslMode !== "disabled" && (
             <div
@@ -303,31 +300,32 @@ export default function DatabaseConfig({ initialSettings }: DatabaseConfigProps)
                 flexDirection: "column",
                 gap: "1rem",
                 padding: "1rem",
-                backgroundColor: "#f5f5f5",
-                borderRadius: "8px"
+                backgroundColor: "var(--surface-strong)",
+                borderRadius: "var(--radius)",
+                border: "1px solid var(--border)"
               }}
             >
-              <div>
-                <label style={{ display: "block", marginBottom: "0.25rem" }}>CA Certificate</label>
+              <label className="field">
+                <span className="field-label">CA Certificate</span>
                 <input type="file" accept=".pem,.crt,.ca-bundle" onChange={(event) => handleFileUpload(event, setSslCaCert)} />
                 {initialSettings.secrets.hasSslCaCert && !sslCaCert && (
-                  <div style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#666" }}>Stored CA certificate will be reused.</div>
+                  <span className="helper-text">Stored CA certificate will be reused.</span>
                 )}
-              </div>
-              <div>
-                <label style={{ display: "block", marginBottom: "0.25rem" }}>Client Certificate</label>
+              </label>
+              <label className="field">
+                <span className="field-label">Client Certificate</span>
                 <input type="file" accept=".pem,.crt" onChange={(event) => handleFileUpload(event, setSslClientCert)} />
                 {initialSettings.secrets.hasSslClientCert && !sslClientCert && (
-                  <div style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#666" }}>Stored client certificate will be reused.</div>
+                  <span className="helper-text">Stored client certificate will be reused.</span>
                 )}
-              </div>
-              <div>
-                <label style={{ display: "block", marginBottom: "0.25rem" }}>Client Key</label>
+              </label>
+              <label className="field">
+                <span className="field-label">Client Key</span>
                 <input type="file" accept=".pem,.key" onChange={(event) => handleFileUpload(event, setSslClientKey)} />
                 {initialSettings.secrets.hasSslClientKey && !sslClientKey && (
-                  <div style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#666" }}>Stored client key will be reused.</div>
+                  <span className="helper-text">Stored client key will be reused.</span>
                 )}
-              </div>
+              </label>
             </div>
           )}
         </>
@@ -336,10 +334,11 @@ export default function DatabaseConfig({ initialSettings }: DatabaseConfigProps)
       {statusMessage && (
         <div
           style={{
-            padding: "1rem",
-            borderRadius: "8px",
+            padding: "0.75rem",
+            borderRadius: "var(--radius)",
             border: `1px solid ${statusMessage.ok ? "#52c41a" : "#ff4d4f"}`,
-            backgroundColor: statusMessage.ok ? "#f6ffed" : "#fff2f0"
+            backgroundColor: statusMessage.ok ? "#f6ffed" : "#fff2f0",
+            color: statusMessage.ok ? "#52c41a" : "#cf1322"
           }}
         >
           {statusMessage.message}
@@ -347,25 +346,32 @@ export default function DatabaseConfig({ initialSettings }: DatabaseConfigProps)
       )}
 
       {saveError && (
-        <div
-          style={{
-            padding: "1rem",
-            borderRadius: "8px",
-            border: "1px solid #ff4d4f",
-            backgroundColor: "#fff2f0",
-            color: "#cf1322"
-          }}
-        >
+        <div className="notice-error">
+          <strong>Save failed</strong>
           {saveError}
         </div>
       )}
 
-      <div style={{ display: "flex", gap: "1rem" }}>
+      <div className="inline-stack">
         <button type="button" onClick={handleTest} disabled={testing} className="button-secondary">
-          {testing ? "Testing..." : "Test Connection"}
+          {testing ? (
+            <>
+              <span className="spinner spinner-dark" />
+              Testing...
+            </>
+          ) : (
+            "Test Connection"
+          )}
         </button>
         <button type="button" onClick={handleSave} disabled={saving} className="button-primary">
-          {saving ? "Saving..." : "Save Configuration"}
+          {saving ? (
+            <>
+              <span className="spinner" />
+              Saving...
+            </>
+          ) : (
+            "Save Configuration"
+          )}
         </button>
       </div>
 
@@ -374,37 +380,31 @@ export default function DatabaseConfig({ initialSettings }: DatabaseConfigProps)
           style={{
             position: "fixed",
             inset: 0,
-            backgroundColor: "rgba(0,0,0,0.45)",
+            backgroundColor: "rgba(12, 24, 22, 0.5)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             zIndex: 1000
           }}
         >
-          <div
-            style={{
-              backgroundColor: "white",
-              padding: "2rem",
-              borderRadius: "8px",
-              maxWidth: "520px",
-              width: "90%"
-            }}
-          >
+          <div className="card scale-in" style={{ padding: "2rem", maxWidth: 520, width: "90%" }}>
             <h3 style={{ marginTop: 0 }}>Confirm Database Switch</h3>
-            <p style={{ color: "#cf1322", fontWeight: 600 }}>
-              TreeForms does not migrate existing data when you switch backends.
-            </p>
+            <div className="notice-error" style={{ marginBottom: "1rem" }}>
+              <strong>Warning:</strong> TreeForms does not migrate existing data when you switch backends.
+            </div>
             <p>
               Type <strong>CONFIRM</strong> to save this backend change.
             </p>
-            <input
-              type="text"
-              value={confirmValue}
-              onChange={(event) => setConfirmValue(event.target.value)}
-              placeholder="Type CONFIRM"
-              style={{ width: "100%", padding: "0.5rem", marginBottom: "1rem" }}
-            />
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: "1rem" }}>
+            <label className="field">
+              <input
+                type="text"
+                value={confirmValue}
+                onChange={(event) => setConfirmValue(event.target.value)}
+                placeholder="Type CONFIRM"
+                style={{ width: "100%", marginBottom: "1rem" }}
+              />
+            </label>
+            <div className="inline-stack">
               <button type="button" onClick={() => setShowConfirm(false)} className="button-secondary">
                 Cancel
               </button>
@@ -415,7 +415,14 @@ export default function DatabaseConfig({ initialSettings }: DatabaseConfigProps)
                 disabled={confirmValue !== "CONFIRM" || saving}
                 style={{ backgroundColor: "#cf1322" }}
               >
-                Confirm Change
+                {saving ? (
+                  <>
+                    <span className="spinner" />
+                    Saving...
+                  </>
+                ) : (
+                  "Confirm Change"
+                )}
               </button>
             </div>
           </div>

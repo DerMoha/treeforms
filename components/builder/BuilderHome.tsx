@@ -142,7 +142,7 @@ export function BuilderHome() {
   return (
     <main className="container page-stack">
       <section className="card page-card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", flexWrap: "wrap" }}>
           <div>
             <span className="badge">Builder</span>
             <h1 className="page-card-title">Forms</h1>
@@ -172,7 +172,14 @@ export function BuilderHome() {
             disabled={saving}
             onClick={handleCreateForm}
           >
-            {saving ? "Creating..." : "Create Form"}
+            {saving ? (
+              <>
+                <span className="spinner" />
+                Creating...
+              </>
+            ) : (
+              "Create Form"
+            )}
           </button>
           <button
             type="button"
@@ -180,7 +187,14 @@ export function BuilderHome() {
             disabled={importing}
             onClick={openImportDialog}
           >
-            {importing ? "Importing..." : "Import Form JSON"}
+            {importing ? (
+              <>
+                <span className="spinner spinner-dark" />
+                Importing...
+              </>
+            ) : (
+              "Import Form JSON"
+            )}
           </button>
         </div>
 
@@ -197,19 +211,28 @@ export function BuilderHome() {
       <section className="card page-card">
         <h2 className="section-title">Existing forms</h2>
 
-        {loading ? <p className="state-text">Loading forms...</p> : null}
+        {loading ? (
+          <div className="list-stack">
+            <div className="skeleton" style={{ height: 90 }} />
+            <div className="skeleton" style={{ height: 90 }} />
+          </div>
+        ) : null}
 
         {!loading && sortedForms.length === 0 ? (
-          <p className="helper-text">
-            No forms yet. Create your first branch-aware form.
-          </p>
+          <div className="empty-state">
+            <div className="empty-state-icon">🌱</div>
+            <p className="empty-state-title">No forms yet</p>
+            <p className="helper-text">
+              Create your first branch-aware form above, or import an existing JSON schema.
+            </p>
+          </div>
         ) : null}
 
         <div className="list-stack">
           {sortedForms.map((form) => (
             <article
               key={form.formId}
-              className="card muted-card"
+              className="card muted-card hover-lift"
             >
               <strong>{form.title}</strong>
               <span className="mono-text">
