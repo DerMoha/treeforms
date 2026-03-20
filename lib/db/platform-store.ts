@@ -1,98 +1,85 @@
-import { getStorage } from "@/lib/db/storage";
+import {
+  getActiveDatabaseConfigRecord,
+  getStoredDatabaseConfigRecord,
+  saveStoredDatabaseConfigRecord
+} from "@/lib/db/bootstrap-store";
+import {
+  normalizeDatabaseConfig,
+  redactDatabaseConfig,
+  toSecretState,
+  type DatabaseConfig,
+  type StoredDatabaseConfigRecord
+} from "@/lib/db/database-config";
 
-export type PlatformDbMode = "env-var" | "mysql" | "sqlite";
+export type PlatformDbConfig = DatabaseConfig;
 
-export interface PlatformDbConfig {
-  mode: PlatformDbMode;
-  host?: string;
-  port?: number;
-  database?: string;
-  username?: string;
-  password?: string;
-  sslMode?: "disabled" | "preferred" | "required";
-  sslCaCert?: string;
-  sslClientCert?: string;
-  sslClientKey?: string;
-  sqlitePath?: string;
+export async function getPlatformDbConfig(): Promise<PlatformDbConfig> {
+  return (await getActiveDatabaseConfigRecord()).config;
 }
 
-const PLATFORM_DB_CONFIG_KEY = "platform_db_config";
+export async function getPlatformDbSettings() {
+  const [stored, active] = await Promise.all([
+    getStoredDatabaseConfigRecord(),
+    getActiveDatabaseConfigRecord()
+  ]);
 
-export async function getPlatformSetting(key: string): Promise<string | null> {
-  return getStorage().platformSettings.get(key);
+  return {
+    config: redactDatabaseConfig(active.config),
+    secrets: toSecretState(active.config),
+    isDefault: stored === null,
+    lastValidatedAt: active.lastValidatedAt,
+    lastValidationError: active.lastValidationError,
+    updatedAt: active.updatedAt
+  };
 }
 
-export async function setPlatformSetting(key: string, value: string, encrypt = false): Promise<void> {
-  return getStorage().platformSettings.set(key, value, encrypt);
+export async function mergePlatformDbConfig(input: PlatformDbConfig): Promise<StoredDatabaseConfigRecord> {
+  const normalizedInput = normalizeDatabaseConfig(input);
+  const current = await getStoredDatabaseConfigRecord();
+  const now = new Date().toISOString();
+
+  if (normalizedInput.mode === "sqlite") {
+    return {
+      config: normalizedInput,
+      updatedAt: now,
+      lastValidatedAt: null,
+      lastValidationError: null
+    };
+  }
+
+  const existingMysql = current?.config.mode === "mysql" ? current.config : null;
+
+  return {
+    config: {
+      mode: "mysql",
+      host: normalizedInput.host,
+      port: normalizedInput.port,
+      database: normalizedInput.database,
+      username: normalizedInput.username,
+      password:
+        normalizedInput.password !== undefined
+          ? normalizedInput.password
+          : existingMysql?.password,
+      sslMode: normalizedInput.sslMode,
+      sslCaCert:
+        normalizedInput.sslCaCert !== undefined
+          ? normalizedInput.sslCaCert
+          : existingMysql?.sslCaCert,
+      sslClientCert:
+        normalizedInput.sslClientCert !== undefined
+          ? normalizedInput.sslClientCert
+          : existingMysql?.sslClientCert,
+      sslClientKey:
+        normalizedInput.sslClientKey !== undefined
+          ? normalizedInput.sslClientKey
+          : existingMysql?.sslClientKey
+    },
+    updatedAt: now,
+    lastValidatedAt: null,
+    lastValidationError: null
+  };
 }
 
-export async function getPlatformDbConfig(): Promise<PlatformDbConfig | null> {
-  const value = await getPlatformSetting(PLATFORM_DB_CONFIG_KEY);
-  if (!value) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(value) as PlatformDbConfig;
-  } catch {
-    return null;
-  }
-}
-
-export async function setPlatformDbConfig(config: PlatformDbConfig): Promise<void> {
-  const value = JSON.stringify(config);
-  await setPlatformSetting(PLATFORM_DB_CONFIG_KEY, value, true);
-}
-
-export async function testPlatformDbConnection(config: PlatformDbConfig): Promise<{ ok: boolean; error?: string }> {
-  if (config.mode === "sqlite") {
-    return { ok: true };
-  }
-
-  if (config.mode === "env-var") {
-    const { PLATFORM_SUBMISSION_DB_URL, APP_DB_URL } = await import("@/lib/server/constants");
-    const url = PLATFORM_SUBMISSION_DB_URL || APP_DB_URL;
-    if (!url) {
-      return { ok: false, error: "No SUBMISSION_DATABASE_URL or APP_DATABASE_URL environment variable is set." };
-    }
-
-    try {
-      const { createEphemeralExternalPool, pingPool } = await import("@/lib/db/platform");
-      const pool = createEphemeralExternalPool(url, 4000);
-      await pingPool(pool);
-      await pool.end();
-      return { ok: true };
-    } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  }
-
-  if (!config.host || !config.port || !config.database || !config.username) {
-    return { ok: false, error: "Missing required connection parameters." };
-  }
-
-  try {
-    const { getConfiguredSubmissionPool, pingPool, ensureSubmissionTables } = await import("@/lib/db/platform");
-
-    const pool = getConfiguredSubmissionPool({
-      host: config.host,
-      port: config.port,
-      user: config.username,
-      password: config.password || "",
-      databaseName: config.database,
-      ssl: {
-        mode: config.sslMode || "disabled",
-        ca: config.sslCaCert,
-        cert: config.sslClientCert,
-        key: config.sslClientKey
-      }
-    });
-
-    await pingPool(pool);
-    await ensureSubmissionTables(pool);
-    await pool.end();
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
-  }
+export async function savePlatformDbConfigRecord(record: StoredDatabaseConfigRecord): Promise<void> {
+  await saveStoredDatabaseConfigRecord(record);
 }

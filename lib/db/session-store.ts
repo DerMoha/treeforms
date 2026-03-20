@@ -7,15 +7,15 @@ export async function createSession(data: {
   versionNumber: number;
   currentQuestionId: string | null;
 }) {
-  return getStorage().sessions.createSession(data);
+  return (await getStorage()).sessions.createSession(data);
 }
 
 export async function getSession(sessionToken: string): Promise<SessionState | null> {
-  return getStorage().sessions.getSession(sessionToken);
+  return (await getStorage()).sessions.getSession(sessionToken);
 }
 
 export async function getSessionByResumeToken(resumeToken: string): Promise<SessionState | null> {
-  return getStorage().sessions.getSessionByResumeToken(resumeToken);
+  return (await getStorage()).sessions.getSessionByResumeToken(resumeToken);
 }
 
 export async function updateSessionState(data: {
@@ -25,13 +25,13 @@ export async function updateSessionState(data: {
   historyJson: string;
   branchTraceJson: string;
 }) {
-  return getStorage().sessions.updateSessionState(data);
+  return (await getStorage()).sessions.updateSessionState(data);
 }
 
 export async function markSessionCompleted(sessionToken: string) {
-  return getStorage().sessions.markSessionCompleted(sessionToken);
+  return (await getStorage()).sessions.markSessionCompleted(sessionToken);
 }
 
-export function isSessionExpired(session: Pick<SessionState, "expiresAt">) {
-  return getStorage().sessions.isSessionExpired(session);
+export async function isSessionExpired(session: Pick<SessionState, "expiresAt">) {
+  return (await getStorage()).sessions.isSessionExpired(session);
 }

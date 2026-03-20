@@ -11,24 +11,21 @@ Treeforms is a branch-first form builder built with Next.js + TypeScript.
 - Hosted respondent runtime (`/f/{slug}/v/{version}`)
 - Autosave sessions with resume links
 - Back navigation with branch recompute/pruning
-- Submission persistence in MariaDB
+- One configurable persistence backend for all app and submission data
 - Built-in submissions view + CSV export (wide + facts)
-- Workspace DB target testing and activation API for customer-provided MariaDB
 
 ## Tech stack
 
 - Next.js App Router
 - TypeScript
-- MariaDB/MySQL via `mysql2` (production/external targets)
-- Local SQLite fallback via `better-sqlite3` (dev/no MySQL)
+- MariaDB/MySQL via `mysql2`
+- SQLite via `better-sqlite3`
 - Vitest for core engine/schema tests
 
 ## Environment variables
 
 ```bash
-APP_DATABASE_URL=mysql://user:password@host:3306/treeforms_app
-SUBMISSION_DATABASE_URL=mysql://user:password@host:3306/treeforms_submissions
-LOCAL_SQLITE_PATH=.data/treeforms-local.sqlite
+LOCAL_SQLITE_PATH=.data/treeforms.sqlite
 DEFAULT_WORKSPACE_ID=workspace_demo
 DEFAULT_WORKSPACE_NAME=Demo Workspace
 CREDENTIAL_ENCRYPTION_KEY=replace-with-32-plus-char-secret
@@ -38,22 +35,16 @@ ADMIN_SESSION_SECRET=replace-with-32-plus-char-session-secret
 ADMIN_SESSION_TTL_SECONDS=28800
 RESPONDENT_SESSION_TTL_SECONDS=86400
 PUBLIC_API_CORS_ORIGINS=https://admin.example.com
-DB_TARGET_TEST_ALLOWED_HOSTS=db.example.com
-DB_TARGET_TEST_ALLOW_PRIVATE=0
 TRUST_X_FORWARDED_FOR=0
 ```
 
-`SUBMISSION_DATABASE_URL` is optional; it falls back to `APP_DATABASE_URL`.
-
-`LOCAL_SQLITE_PATH` is optional and defaults to `.data/treeforms-local.sqlite`.
+`LOCAL_SQLITE_PATH` is optional and seeds the default local SQLite file for a fresh install.
 
 `CREDENTIAL_ENCRYPTION_KEY`, `ADMIN_LOGIN_PASSWORD`, and `ADMIN_SESSION_SECRET` are required in non-test environments.
 
 `TRUST_X_FORWARDED_FOR` defaults to `0`. Set it to `1` only when running behind a trusted proxy that correctly sets `x-forwarded-for`.
 
-If `APP_DATABASE_URL` is not set, Treeforms now persists local app state (forms/drafts/versions/sessions) to SQLite so builder data survives server restarts. Set `LOCAL_SQLITE_DISABLED=1` to fall back to pure in-memory mode.
-
-Submission export/persistence uses the same local persisted fallback when neither `SUBMISSION_DATABASE_URL` nor `APP_DATABASE_URL` is configured.
+TreeForms now always uses one real database backend selected from the Settings tab. Fresh installs default to local SQLite, and you can switch the app to MySQL from `/builder/settings/database`.
 
 ## Run
 
@@ -156,12 +147,13 @@ Implemented endpoints:
 - `GET /api/forms/:formId/versions`
 - `GET /api/forms/:formId/submissions`
 - `GET /api/forms/:formId/submissions/export.csv`
+- `GET /api/settings/database`
+- `PUT /api/settings/database`
+- `POST /api/settings/database/test`
 - `POST /api/public/forms/:slug/:version/start`
 - `POST /api/public/sessions/:sessionToken/answer`
 - `POST /api/public/sessions/:sessionToken/navigate`
 - `POST /api/public/sessions/:sessionToken/complete`
-- `POST /api/workspaces/:workspaceId/db-target/test`
-- `PUT /api/workspaces/:workspaceId/db-target`
 
 Builder and workspace API routes now require an admin session cookie. Public runtime routes (`/f/*` and `/api/public/*`) remain publicly accessible.
 
@@ -207,4 +199,4 @@ Import applies light normalization for AI-generated payloads (missing ids, blank
 
 - This MVP intentionally limits branching logic to option-driven flow.
 - Question reuse across flows is disabled by design.
-- Submission analytics merge platform and active external DB target data by `submission_id`.
+- SQLite and MySQL use the same relational schema and store both builder data and submissions.

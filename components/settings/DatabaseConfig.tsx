@@ -1,247 +1,201 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useMemo, useState } from "react";
 
 import { readCsrfToken } from "@/lib/client/csrf";
+import { type DatabaseConfig, type DatabaseSecretState } from "@/lib/db/database-config";
 
-type DbMode = "env-var" | "mysql" | "sqlite";
-
-interface DbConfig {
-  mode: DbMode;
-  host?: string;
-  port?: number;
-  database?: string;
-  username?: string;
-  password?: string;
-  sslMode?: "disabled" | "preferred" | "required";
-  sslCaCert?: string;
-  sslClientCert?: string;
-  sslClientKey?: string;
-  sqlitePath?: string;
+interface DatabaseSettingsSnapshot {
+  config: DatabaseConfig;
+  secrets: DatabaseSecretState;
+  isDefault: boolean;
+  lastValidatedAt: string | null;
+  lastValidationError: string | null;
+  updatedAt: string;
 }
 
 interface DatabaseConfigProps {
-  initialConfig: DbConfig | null;
-  currentSource: "environment-variable" | "stored-configuration" | "none";
-  hasEnvVar: boolean;
+  initialSettings: DatabaseSettingsSnapshot;
 }
 
-export default function DatabaseConfig({
-  initialConfig,
-  currentSource,
-  hasEnvVar
-}: DatabaseConfigProps) {
-  const [mode, setMode] = useState<DbMode>(initialConfig?.mode ?? "env-var");
-  const [host, setHost] = useState(initialConfig?.host ?? "");
-  const [port, setPort] = useState(initialConfig?.port?.toString() ?? "3306");
-  const [database, setDatabase] = useState(initialConfig?.database ?? "");
-  const [username, setUsername] = useState(initialConfig?.username ?? "");
+export default function DatabaseConfig({ initialSettings }: DatabaseConfigProps) {
+  const initialConfig = initialSettings.config;
+
+  const [mode, setMode] = useState<DatabaseConfig["mode"]>(initialConfig.mode);
+  const [sqlitePath, setSqlitePath] = useState(
+    initialConfig.mode === "sqlite" ? initialConfig.sqlitePath : ".data/treeforms.sqlite"
+  );
+  const [host, setHost] = useState(initialConfig.mode === "mysql" ? initialConfig.host : "");
+  const [port, setPort] = useState(
+    initialConfig.mode === "mysql" ? String(initialConfig.port) : "3306"
+  );
+  const [database, setDatabase] = useState(
+    initialConfig.mode === "mysql" ? initialConfig.database : ""
+  );
+  const [username, setUsername] = useState(
+    initialConfig.mode === "mysql" ? initialConfig.username : ""
+  );
   const [password, setPassword] = useState("");
   const [sslMode, setSslMode] = useState<"disabled" | "preferred" | "required">(
-    initialConfig?.sslMode ?? "disabled"
+    initialConfig.mode === "mysql" ? initialConfig.sslMode : "disabled"
   );
-  const [sslCaCert, setSslCaCert] = useState(initialConfig?.sslCaCert ?? "");
-  const [sslClientCert, setSslClientCert] = useState(
-    initialConfig?.sslClientCert ?? ""
-  );
-  const [sslClientKey, setSslClientKey] = useState(
-    initialConfig?.sslClientKey ?? ""
-  );
-  const [sqlitePath, setSqlitePath] = useState(
-    initialConfig?.sqlitePath ?? ".data/treeforms-local.sqlite"
-  );
+  const [sslCaCert, setSslCaCert] = useState("");
+  const [sslClientCert, setSslClientCert] = useState("");
+  const [sslClientKey, setSslClientKey] = useState("");
 
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success: boolean;
-    message: string;
-  } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<{ ok: boolean; message: string } | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmValue, setConfirmValue] = useState("");
 
-  const getConfig = useCallback((): DbConfig => {
-    if (mode === "env-var") {
-      return { mode };
+  const currentSummary = useMemo(() => {
+    if (initialConfig.mode === "sqlite") {
+      return `SQLite at ${initialConfig.sqlitePath}`;
     }
+
+    return `MySQL ${initialConfig.username}@${initialConfig.host}:${initialConfig.port}/${initialConfig.database}`;
+  }, [initialConfig]);
+
+  function buildConfig(): DatabaseConfig {
     if (mode === "sqlite") {
       return {
-        mode,
-        sqlitePath: sqlitePath || ".data/treeforms-local.sqlite"
+        mode: "sqlite",
+        sqlitePath: sqlitePath.trim() || ".data/treeforms.sqlite"
       };
     }
-    return {
-      mode,
-      host,
-      port: parseInt(port, 10) || 3306,
-      database,
-      username,
-      password: password || initialConfig?.password || "",
-      sslMode,
-      sslCaCert: sslMode === "disabled" ? undefined : sslCaCert,
-      sslClientCert: sslMode === "disabled" ? undefined : sslClientCert,
-      sslClientKey: sslMode === "disabled" ? undefined : sslClientKey
-    };
-  }, [
-    mode,
-    host,
-    port,
-    database,
-    username,
-    password,
-    sslMode,
-    sslCaCert,
-    sslClientCert,
-    sslClientKey,
-    sqlitePath,
-    initialConfig?.password
-  ]);
 
-  const handleTest = async () => {
+    return {
+      mode: "mysql",
+      host: host.trim(),
+      port: Number(port) || 3306,
+      database: database.trim(),
+      username: username.trim(),
+      password: password === "" ? undefined : password,
+      sslMode,
+      sslCaCert: sslCaCert === "" ? undefined : sslCaCert,
+      sslClientCert: sslClientCert === "" ? undefined : sslClientCert,
+      sslClientKey: sslClientKey === "" ? undefined : sslClientKey
+    };
+  }
+
+  async function handleTest() {
     setTesting(true);
-    setTestResult(null);
+    setStatusMessage(null);
     setSaveError(null);
 
     try {
-      const config = getConfig();
-
-      const res = await fetch("/api/settings/database/test", {
+      const response = await fetch("/api/settings/database/test", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-csrf-token": readCsrfToken()
         },
-        body: JSON.stringify({ config })
+        body: JSON.stringify({ config: buildConfig() })
       });
+      const data = await response.json();
 
-      const data = await res.json();
-
-      if (res.ok && data.ok) {
-        setTestResult({ success: true, message: "Connection successful!" });
-      } else {
-        setTestResult({
-          success: false,
-          message: data.error || "Connection failed"
-        });
+      if (!response.ok || !data.ok) {
+        setStatusMessage({ ok: false, message: data.error || "Connection test failed" });
+        return;
       }
+
+      setStatusMessage({ ok: true, message: data.message || "Connection successful" });
     } catch (error) {
-      setTestResult({
-        success: false,
-        message: error instanceof Error ? error.message : "Unknown error"
+      setStatusMessage({
+        ok: false,
+        message: error instanceof Error ? error.message : "Connection test failed"
       });
     } finally {
       setTesting(false);
     }
-  };
+  }
 
-  const handleSave = async () => {
-    if (!testResult?.success && mode !== "sqlite") {
-      setSaveError("Please test the connection before saving.");
-      return;
-    }
-
+  function handleSave() {
+    setSaveError(null);
     setShowConfirm(true);
-  };
+  }
 
-  const doSave = async () => {
-    setShowConfirm(false);
+  async function doSave() {
     setSaving(true);
     setSaveError(null);
+    setStatusMessage(null);
 
     try {
-      const config = getConfig();
-
-      const res = await fetch("/api/settings/database", {
+      const response = await fetch("/api/settings/database", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           "x-csrf-token": readCsrfToken()
         },
-        body: JSON.stringify({ config })
+        body: JSON.stringify({ config: buildConfig() })
       });
+      const data = await response.json();
 
-      const data = await res.json();
-
-      if (!res.ok || !data.ok) {
-        setSaveError(data.error || "Failed to save configuration");
-      } else {
-        setSaveError(null);
-        setTestResult(null);
-        // Reload to get updated state
-        window.location.reload();
+      if (!response.ok || !data.ok) {
+        setSaveError(data.error || "Failed to save database configuration");
+        return;
       }
+
+      window.location.reload();
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "Unknown error");
+      setSaveError(error instanceof Error ? error.message : "Failed to save database configuration");
     } finally {
       setSaving(false);
+      setShowConfirm(false);
+      setConfirmValue("");
     }
-  };
+  }
 
-  const handleFileUpload = (
+  function handleFileUpload(
     event: React.ChangeEvent<HTMLInputElement>,
     setter: (value: string) => void
-  ) => {
+  ) {
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setter(e.target?.result as string);
+    reader.onload = () => {
+      setter(String(reader.result ?? ""));
     };
     reader.readAsText(file);
-  };
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-      {/* Current Status */}
       <div
         style={{
           padding: "1rem",
-          backgroundColor:
-            currentSource === "environment-variable"
-              ? "#e6f3ff"
-              : currentSource === "stored-configuration"
-                ? "#e6ffe6"
-                : "#fff3e6",
-          borderRadius: "4px",
-          border: `1px solid ${
-            currentSource === "environment-variable"
-              ? "#1890ff"
-              : currentSource === "stored-configuration"
-                ? "#52c41a"
-                : "#faad14"
-          }`
+          border: "1px solid #d9d9d9",
+          borderRadius: "8px",
+          backgroundColor: "#fafafa"
         }}
       >
-        <strong>Current Source:</strong>{" "}
-        {currentSource === "environment-variable" &&
-          "Using SUBMISSION_DATABASE_URL environment variable"}
-        {currentSource === "stored-configuration" &&
-          "Using configuration stored in database"}
-        {currentSource === "none" && "No database configured"}
+        <div><strong>Active backend:</strong> {currentSummary}</div>
+        <div><strong>Config source:</strong> {initialSettings.isDefault ? "Default local SQLite" : "Saved in system settings"}</div>
+        <div><strong>Last validated:</strong> {initialSettings.lastValidatedAt ?? "Never"}</div>
+        {initialSettings.lastValidationError && (
+          <div style={{ color: "#cf1322", marginTop: "0.5rem" }}>
+            <strong>Last error:</strong> {initialSettings.lastValidationError}
+          </div>
+        )}
       </div>
 
-      {/* Mode Selection */}
       <div>
-        <label style={{ display: "block", marginBottom: "0.5rem" }}>
-          Database Mode
-        </label>
+        <label style={{ display: "block", marginBottom: "0.5rem" }}>Backend</label>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <input
               type="radio"
               name="dbMode"
-              value="env-var"
-              checked={mode === "env-var"}
-              onChange={() => setMode("env-var")}
-              disabled={!hasEnvVar}
+              value="sqlite"
+              checked={mode === "sqlite"}
+              onChange={() => setMode("sqlite")}
             />
-            <span>Use Environment Variable</span>
-            {!hasEnvVar && (
-              <span style={{ color: "#999", fontSize: "0.875rem" }}>
-                (not configured)
-              </span>
-            )}
+            <span>SQLite</span>
           </label>
           <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <input
@@ -253,104 +207,92 @@ export default function DatabaseConfig({
             />
             <span>MySQL / MariaDB</span>
           </label>
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <input
-              type="radio"
-              name="dbMode"
-              value="sqlite"
-              checked={mode === "sqlite"}
-              onChange={() => setMode("sqlite")}
-            />
-            <span>SQLite (Local Development)</span>
-          </label>
         </div>
       </div>
 
-      {/* MySQL Configuration */}
+      {mode === "sqlite" && (
+        <div>
+          <label style={{ display: "block", marginBottom: "0.25rem" }}>SQLite File Path</label>
+          <input
+            type="text"
+            value={sqlitePath}
+            onChange={(event) => setSqlitePath(event.target.value)}
+            placeholder=".data/treeforms.sqlite"
+            style={{ width: "100%", padding: "0.5rem" }}
+          />
+          <p style={{ fontSize: "0.875rem", color: "#666", marginTop: "0.25rem" }}>
+            Relative paths stay inside the workspace. The app will create the file if needed.
+          </p>
+        </div>
+      )}
+
       {mode === "mysql" && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
             <div>
-              <label style={{ display: "block", marginBottom: "0.25rem" }}>
-                Host <span style={{ color: "red" }}>*</span>
-              </label>
+              <label style={{ display: "block", marginBottom: "0.25rem" }}>Host</label>
               <input
                 type="text"
                 value={host}
-                onChange={(e) => setHost(e.target.value)}
-                placeholder="localhost"
+                onChange={(event) => setHost(event.target.value)}
                 style={{ width: "100%", padding: "0.5rem" }}
               />
             </div>
             <div>
-              <label style={{ display: "block", marginBottom: "0.25rem" }}>
-                Port <span style={{ color: "red" }}>*</span>
-              </label>
+              <label style={{ display: "block", marginBottom: "0.25rem" }}>Port</label>
               <input
                 type="number"
                 value={port}
-                onChange={(e) => setPort(e.target.value)}
-                placeholder="3306"
+                onChange={(event) => setPort(event.target.value)}
                 style={{ width: "100%", padding: "0.5rem" }}
               />
             </div>
           </div>
 
           <div>
-            <label style={{ display: "block", marginBottom: "0.25rem" }}>
-              Database Name <span style={{ color: "red" }}>*</span>
-            </label>
+            <label style={{ display: "block", marginBottom: "0.25rem" }}>Database Name</label>
             <input
               type="text"
               value={database}
-              onChange={(e) => setDatabase(e.target.value)}
-              placeholder="treeforms_submissions"
+              onChange={(event) => setDatabase(event.target.value)}
               style={{ width: "100%", padding: "0.5rem" }}
             />
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
             <div>
-              <label style={{ display: "block", marginBottom: "0.25rem" }}>
-                Username <span style={{ color: "red" }}>*</span>
-              </label>
+              <label style={{ display: "block", marginBottom: "0.25rem" }}>Username</label>
               <input
                 type="text"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="treeforms_user"
+                onChange={(event) => setUsername(event.target.value)}
                 style={{ width: "100%", padding: "0.5rem" }}
               />
             </div>
             <div>
-              <label style={{ display: "block", marginBottom: "0.25rem" }}>
-                Password
-              </label>
+              <label style={{ display: "block", marginBottom: "0.25rem" }}>Password</label>
               <input
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={initialConfig?.password ? "•••••••• (unchanged)" : ""}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder={initialSettings.secrets.hasPassword ? "Stored password will be reused" : "Optional"}
                 style={{ width: "100%", padding: "0.5rem" }}
               />
             </div>
           </div>
 
-          {/* SSL Configuration */}
           <div>
-            <label style={{ display: "block", marginBottom: "0.5rem" }}>
-              SSL Mode
-            </label>
+            <label style={{ display: "block", marginBottom: "0.25rem" }}>SSL Mode</label>
             <select
               value={sslMode}
-              onChange={(e) =>
-                setSslMode(e.target.value as "disabled" | "preferred" | "required")
+              onChange={(event) =>
+                setSslMode(event.target.value as "disabled" | "preferred" | "required")
               }
               style={{ width: "100%", padding: "0.5rem" }}
             >
               <option value="disabled">Disabled</option>
-              <option value="preferred">Preferred (use if available)</option>
-              <option value="required">Required (must use SSL)</option>
+              <option value="preferred">Preferred</option>
+              <option value="required">Required</option>
             </select>
           </div>
 
@@ -362,104 +304,55 @@ export default function DatabaseConfig({
                 gap: "1rem",
                 padding: "1rem",
                 backgroundColor: "#f5f5f5",
-                borderRadius: "4px"
+                borderRadius: "8px"
               }}
             >
               <div>
-                <label style={{ display: "block", marginBottom: "0.25rem" }}>
-                  CA Certificate (optional)
-                </label>
-                <input
-                  type="file"
-                  accept=".pem,.crt,.ca-bundle"
-                  onChange={(e) => handleFileUpload(e, setSslCaCert)}
-                />
-                {sslCaCert && (
-                  <div style={{ marginTop: "0.5rem", fontSize: "0.875rem" }}>
-                    {sslCaCert.length} bytes loaded
-                  </div>
+                <label style={{ display: "block", marginBottom: "0.25rem" }}>CA Certificate</label>
+                <input type="file" accept=".pem,.crt,.ca-bundle" onChange={(event) => handleFileUpload(event, setSslCaCert)} />
+                {initialSettings.secrets.hasSslCaCert && !sslCaCert && (
+                  <div style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#666" }}>Stored CA certificate will be reused.</div>
                 )}
               </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
-                <div>
-                  <label style={{ display: "block", marginBottom: "0.25rem" }}>
-                    Client Certificate (optional)
-                  </label>
-                  <input
-                    type="file"
-                    accept=".pem,.crt"
-                    onChange={(e) => handleFileUpload(e, setSslClientCert)}
-                  />
-                  {sslClientCert && (
-                    <div style={{ marginTop: "0.5rem", fontSize: "0.875rem" }}>
-                      {sslClientCert.length} bytes loaded
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <label style={{ display: "block", marginBottom: "0.25rem" }}>
-                    Client Key (optional)
-                  </label>
-                  <input
-                    type="file"
-                    accept=".pem,.key"
-                    onChange={(e) => handleFileUpload(e, setSslClientKey)}
-                  />
-                  {sslClientKey && (
-                    <div style={{ marginTop: "0.5rem", fontSize: "0.875rem" }}>
-                      {sslClientKey.length} bytes loaded
-                    </div>
-                  )}
-                </div>
+              <div>
+                <label style={{ display: "block", marginBottom: "0.25rem" }}>Client Certificate</label>
+                <input type="file" accept=".pem,.crt" onChange={(event) => handleFileUpload(event, setSslClientCert)} />
+                {initialSettings.secrets.hasSslClientCert && !sslClientCert && (
+                  <div style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#666" }}>Stored client certificate will be reused.</div>
+                )}
+              </div>
+              <div>
+                <label style={{ display: "block", marginBottom: "0.25rem" }}>Client Key</label>
+                <input type="file" accept=".pem,.key" onChange={(event) => handleFileUpload(event, setSslClientKey)} />
+                {initialSettings.secrets.hasSslClientKey && !sslClientKey && (
+                  <div style={{ marginTop: "0.25rem", fontSize: "0.875rem", color: "#666" }}>Stored client key will be reused.</div>
+                )}
               </div>
             </div>
           )}
         </>
       )}
 
-      {/* SQLite Configuration */}
-      {mode === "sqlite" && (
-        <div>
-          <label style={{ display: "block", marginBottom: "0.25rem" }}>
-            Database File Path
-          </label>
-          <input
-            type="text"
-            value={sqlitePath}
-            onChange={(e) => setSqlitePath(e.target.value)}
-            placeholder=".data/treeforms-local.sqlite"
-            style={{ width: "100%", padding: "0.5rem" }}
-          />
-          <p style={{ fontSize: "0.875rem", color: "#666", marginTop: "0.25rem" }}>
-            Relative to the application root. Default: .data/treeforms-local.sqlite
-          </p>
-        </div>
-      )}
-
-      {/* Test Result */}
-      {testResult && (
+      {statusMessage && (
         <div
           style={{
             padding: "1rem",
-            backgroundColor: testResult.success ? "#f6ffed" : "#fff2f0",
-            borderRadius: "4px",
-            border: `1px solid ${testResult.success ? "#52c41a" : "#ff4d4f"}`
+            borderRadius: "8px",
+            border: `1px solid ${statusMessage.ok ? "#52c41a" : "#ff4d4f"}`,
+            backgroundColor: statusMessage.ok ? "#f6ffed" : "#fff2f0"
           }}
         >
-          {testResult.message}
+          {statusMessage.message}
         </div>
       )}
 
-      {/* Save Error */}
       {saveError && (
         <div
           style={{
             padding: "1rem",
-            backgroundColor: "#fff2f0",
-            borderRadius: "4px",
+            borderRadius: "8px",
             border: "1px solid #ff4d4f",
+            backgroundColor: "#fff2f0",
             color: "#cf1322"
           }}
         >
@@ -467,38 +360,21 @@ export default function DatabaseConfig({
         </div>
       )}
 
-      {/* Actions */}
       <div style={{ display: "flex", gap: "1rem" }}>
-        {mode !== "sqlite" && (
-          <button
-            type="button"
-            onClick={handleTest}
-            disabled={testing || mode === "env-var"}
-            className="button-secondary"
-          >
-            {testing ? "Testing..." : "Test Connection"}
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          className="button-primary"
-        >
+        <button type="button" onClick={handleTest} disabled={testing} className="button-secondary">
+          {testing ? "Testing..." : "Test Connection"}
+        </button>
+        <button type="button" onClick={handleSave} disabled={saving} className="button-primary">
           {saving ? "Saving..." : "Save Configuration"}
         </button>
       </div>
 
-      {/* Confirmation Modal */}
       {showConfirm && (
         <div
           style={{
             position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.45)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -510,49 +386,33 @@ export default function DatabaseConfig({
               backgroundColor: "white",
               padding: "2rem",
               borderRadius: "8px",
-              maxWidth: "500px",
+              maxWidth: "520px",
               width: "90%"
             }}
           >
-            <h3 style={{ marginTop: 0 }}>Confirm Database Change</h3>
-            <p style={{ color: "#cf1322", fontWeight: 500 }}>
-              Warning: Changing the submission database will affect where new
-              form submissions are stored. Existing submissions in the current
-              database will not be automatically migrated.
+            <h3 style={{ marginTop: 0 }}>Confirm Database Switch</h3>
+            <p style={{ color: "#cf1322", fontWeight: 600 }}>
+              TreeForms does not migrate existing data when you switch backends.
             </p>
             <p>
-              Are you sure you want to proceed? Type <strong>CONFIRM</strong> to
-              continue:
+              Type <strong>CONFIRM</strong> to save this backend change.
             </p>
             <input
               type="text"
+              value={confirmValue}
+              onChange={(event) => setConfirmValue(event.target.value)}
               placeholder="Type CONFIRM"
               style={{ width: "100%", padding: "0.5rem", marginBottom: "1rem" }}
-              onChange={(e) => {
-                if (e.target.value === "CONFIRM") {
-                  e.target.dataset.confirmed = "true";
-                } else {
-                  delete e.target.dataset.confirmed;
-                }
-              }}
             />
-            <div style={{ display: "flex", gap: "1rem", justifyContent: "flex-end" }}>
-              <button
-                type="button"
-                onClick={() => setShowConfirm(false)}
-                className="button-secondary"
-              >
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "1rem" }}>
+              <button type="button" onClick={() => setShowConfirm(false)} className="button-secondary">
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={(e) => {
-                  const input = e.currentTarget.parentElement?.previousElementSibling as HTMLInputElement;
-                  if (input?.dataset.confirmed === "true") {
-                    doSave();
-                  }
-                }}
+                onClick={doSave}
                 className="button-primary"
+                disabled={confirmValue !== "CONFIRM" || saving}
                 style={{ backgroundColor: "#cf1322" }}
               >
                 Confirm Change

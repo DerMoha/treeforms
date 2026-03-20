@@ -1,6 +1,3 @@
-import { type RowDataPacket } from "mysql2/promise";
-import { getReadableSubmissionPools } from "@/lib/db/db-target-store";
-import { isSubmissionDbConfigured } from "@/lib/db/platform";
 import {
   buildSchemaLabelIndex,
   describeBranchTrace,
@@ -11,8 +8,7 @@ import {
   type SchemaLabelIndex
 } from "@/lib/label-index";
 import { type FormSchema } from "@/lib/types";
-import { memorySubmissions, type MemorySubmission } from "./submission-store";
-import { safeArray } from "@/lib/utils/json";
+import { getStorage } from "@/lib/db/storage";
 import { toCsv } from "@/lib/utils/csv";
 
 export interface ExportSchemaVersion {
@@ -29,193 +25,7 @@ export async function exportSubmissionsCsv(
   const labelIndicesByVersion = buildLabelIndexByVersion(schemaVersions);
   const fallbackLabelIndex = pickFallbackLabelIndex(schemaVersions, labelIndicesByVersion);
   const labelIndices = Array.from(labelIndicesByVersion.values());
-
-  if (!isSubmissionDbConfigured()) {
-    const submissions = Array.from(memorySubmissions.values()).filter(
-      (entry) => entry.workspaceId === workspaceId && entry.formId === formId
-    );
-
-    if (mode === "facts") {
-      const headers = [
-        "submissionId",
-        "status",
-        "versionNumber",
-        "questionLabel",
-        "answer",
-        "questionId",
-        "questionType",
-        "optionLabel",
-        "optionId",
-        "textValue",
-        "numberValue",
-        "flowPath",
-        "flowPathLabel",
-        "answeredAt"
-      ];
-
-      const rows = submissions.flatMap((submission: MemorySubmission) =>
-        submission.facts.map((fact) => {
-          const labelIndex =
-            resolveLabelIndexForVersion(
-              submission.versionNumber,
-              labelIndicesByVersion,
-              fallbackLabelIndex
-            ) ?? null;
-
-          const optionLabel = labelIndex
-            ? getOptionContext(labelIndex, fact.questionId, fact.optionId ?? "")?.optionLabel ?? ""
-            : "";
-
-          return [
-            submission.submissionId,
-            submission.status,
-            String(submission.versionNumber),
-            getDisplayQuestionLabel(fact.questionId, labelIndices, labelIndex),
-            formatFactValueForExport(fact, labelIndex),
-            fact.questionId,
-            fact.questionType,
-            optionLabel,
-            fact.optionId ?? "",
-            fact.textValue ?? "",
-            fact.numberValue ?? "",
-            fact.flowPath,
-            formatFlowPathForExport(fact.flowPath, labelIndex),
-            fact.answeredAt
-          ];
-        })
-      );
-
-      return toCsv(headers, rows);
-    }
-
-    const questionIds = Array.from(
-      new Set(submissions.flatMap((submission: MemorySubmission) => submission.facts.map((fact) => fact.questionId)))
-    ).sort();
-    const questionHeaders = buildQuestionHeaders(questionIds, labelIndices);
-
-    const headers = [
-      "submissionId",
-      "status",
-      "versionNumber",
-      "startedAt",
-      "completedAt",
-      "branchTrace",
-      ...questionIds.map((questionId) => questionHeaders.get(questionId) ?? questionId)
-    ];
-
-    const rows = submissions
-      .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
-      .map((submission: MemorySubmission) => {
-        const byQuestion = new Map<string, string[]>();
-        const labelIndex =
-          resolveLabelIndexForVersion(
-            submission.versionNumber,
-            labelIndicesByVersion,
-            fallbackLabelIndex
-          ) ?? null;
-
-        submission.facts.forEach((fact) => {
-          const existing = byQuestion.get(fact.questionId) ?? [];
-          existing.push(formatFactValueForExport(fact, labelIndex));
-          byQuestion.set(fact.questionId, existing);
-        });
-
-        return [
-          submission.submissionId,
-          submission.status,
-          String(submission.versionNumber),
-          submission.startedAt,
-          submission.completedAt ?? "",
-          formatBranchTraceForExport(submission.branchTrace, labelIndex),
-          ...questionIds.map((questionId) => (byQuestion.get(questionId) ?? []).join(" | "))
-        ];
-      });
-
-    return toCsv(headers, rows);
-  }
-
-  const pools = await getReadableSubmissionPools(workspaceId);
-
-  const submissions = new Map<
-    string,
-    {
-      submissionId: string;
-      versionNumber: number;
-      startedAt: string;
-      completedAt: string | null;
-      status: string;
-      branchTrace: string[];
-    }
-  >();
-  const facts: Array<{
-    submissionId: string;
-    questionId: string;
-    questionType: string;
-    optionId: string | null;
-    textValue: string | null;
-    numberValue: number | null;
-    flowPath: string;
-    answeredAt: string;
-  }> = [];
-
-  for (const poolEntry of pools) {
-    const [submissionRows] = await poolEntry.pool.execute<RowDataPacket[]>(
-      `
-        SELECT submission_id, version_number, started_at, completed_at, status, branch_trace_json
-        FROM submissions
-        WHERE workspace_id = ? AND form_id = ?
-      `,
-      [workspaceId, formId]
-    );
-
-    for (const row of submissionRows) {
-      const submissionId = String(row.submission_id);
-      if (!submissions.has(submissionId)) {
-        submissions.set(submissionId, {
-          submissionId,
-          versionNumber: Number(row.version_number),
-          startedAt: new Date(String(row.started_at)).toISOString(),
-          completedAt: row.completed_at ? new Date(String(row.completed_at)).toISOString() : null,
-          status: String(row.status),
-          branchTrace: safeArray<string>(row.branch_trace_json)
-        });
-      }
-    }
-
-    const [factRows] = await poolEntry.pool.execute<RowDataPacket[]>(
-      `
-        SELECT
-          af.submission_id,
-          af.question_id,
-          af.question_type,
-          af.option_id,
-          af.text_value,
-          af.number_value,
-          af.flow_path,
-          af.answered_at
-        FROM answer_facts af
-        JOIN submissions s ON s.submission_id = af.submission_id
-        WHERE s.workspace_id = ? AND s.form_id = ?
-      `,
-      [workspaceId, formId]
-    );
-
-    factRows.forEach((row) => {
-      facts.push({
-        submissionId: String(row.submission_id),
-        questionId: String(row.question_id),
-        questionType: String(row.question_type),
-        optionId: row.option_id ? String(row.option_id) : null,
-        textValue: row.text_value ? String(row.text_value) : null,
-        numberValue:
-          row.number_value === null || row.number_value === undefined
-            ? null
-            : Number(row.number_value),
-        flowPath: String(row.flow_path),
-        answeredAt: new Date(String(row.answered_at)).toISOString()
-      });
-    });
-  }
+  const submissions = await (await getStorage()).submissions.listSubmissionExports(workspaceId, formId);
 
   if (mode === "facts") {
     const headers = [
@@ -235,37 +45,41 @@ export async function exportSubmissionsCsv(
       "answeredAt"
     ];
 
-    const rows = facts.map((fact) => {
-      const submission = submissions.get(fact.submissionId);
-      const versionNumber = submission?.versionNumber ?? 0;
-      const labelIndex =
-        resolveLabelIndexForVersion(versionNumber, labelIndicesByVersion, fallbackLabelIndex) ?? null;
-      const optionLabel = labelIndex
-        ? getOptionContext(labelIndex, fact.questionId, fact.optionId ?? "")?.optionLabel ?? ""
-        : "";
+    const rows = submissions.flatMap((submission) =>
+      submission.facts.map((fact) => {
+        const labelIndex =
+          resolveLabelIndexForVersion(submission.versionNumber, labelIndicesByVersion, fallbackLabelIndex) ??
+          null;
 
-      return [
-        fact.submissionId,
-        submission?.status ?? "",
-        versionNumber ? String(versionNumber) : "",
-        getDisplayQuestionLabel(fact.questionId, labelIndices, labelIndex),
-        formatFactValueForExport(fact, labelIndex),
-        fact.questionId,
-        fact.questionType,
-        optionLabel,
-        fact.optionId ?? "",
-        fact.textValue ?? "",
-        fact.numberValue ?? "",
-        fact.flowPath,
-        formatFlowPathForExport(fact.flowPath, labelIndex),
-        fact.answeredAt
-      ];
-    });
+        const optionLabel = labelIndex
+          ? getOptionContext(labelIndex, fact.questionId, fact.optionId ?? "")?.optionLabel ?? ""
+          : "";
+
+        return [
+          submission.submissionId,
+          submission.status,
+          String(submission.versionNumber),
+          getDisplayQuestionLabel(fact.questionId, labelIndices, labelIndex),
+          formatFactValueForExport(fact, labelIndex),
+          fact.questionId,
+          fact.questionType,
+          optionLabel,
+          fact.optionId ?? "",
+          fact.textValue ?? "",
+          fact.numberValue ?? "",
+          fact.flowPath,
+          formatFlowPathForExport(fact.flowPath, labelIndex),
+          fact.answeredAt
+        ];
+      })
+    );
 
     return toCsv(headers, rows);
   }
 
-  const questionIds = Array.from(new Set(facts.map((fact) => fact.questionId))).sort();
+  const questionIds = Array.from(
+    new Set(submissions.flatMap((submission) => submission.facts.map((fact) => fact.questionId)))
+  ).sort();
   const questionHeaders = buildQuestionHeaders(questionIds, labelIndices);
   const headers = [
     "submissionId",
@@ -277,35 +91,28 @@ export async function exportSubmissionsCsv(
     ...questionIds.map((questionId) => questionHeaders.get(questionId) ?? questionId)
   ];
 
-  const rows = Array.from(submissions.values())
-    .sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt))
-    .map((submission) => {
-      const byQuestion = new Map<string, string[]>();
-      const labelIndex =
-        resolveLabelIndexForVersion(
-          submission.versionNumber,
-          labelIndicesByVersion,
-          fallbackLabelIndex
-        ) ?? null;
+  const rows = submissions.map((submission) => {
+    const byQuestion = new Map<string, string[]>();
+    const labelIndex =
+      resolveLabelIndexForVersion(submission.versionNumber, labelIndicesByVersion, fallbackLabelIndex) ??
+      null;
 
-      facts
-        .filter((fact) => fact.submissionId === submission.submissionId)
-        .forEach((fact) => {
-          const existing = byQuestion.get(fact.questionId) ?? [];
-          existing.push(formatFactValueForExport(fact, labelIndex));
-          byQuestion.set(fact.questionId, existing);
-        });
-
-      return [
-        submission.submissionId,
-        submission.status,
-        String(submission.versionNumber),
-        submission.startedAt,
-        submission.completedAt ?? "",
-        formatBranchTraceForExport(submission.branchTrace, labelIndex),
-        ...questionIds.map((questionId) => (byQuestion.get(questionId) ?? []).join(" | "))
-      ];
+    submission.facts.forEach((fact) => {
+      const existing = byQuestion.get(fact.questionId) ?? [];
+      existing.push(formatFactValueForExport(fact, labelIndex));
+      byQuestion.set(fact.questionId, existing);
     });
+
+    return [
+      submission.submissionId,
+      submission.status,
+      String(submission.versionNumber),
+      submission.startedAt,
+      submission.completedAt ?? "",
+      formatBranchTraceForExport(submission.branchTrace, labelIndex),
+      ...questionIds.map((questionId) => (byQuestion.get(questionId) ?? []).join(" | "))
+    ];
+  });
 
   return toCsv(headers, rows);
 }

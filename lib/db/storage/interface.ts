@@ -1,12 +1,9 @@
-import { type PoolConnection } from "mysql2/promise";
-
 import {
-  type DbTargetConfig,
-  type DbTargetInput,
   type DraftRecord,
   type FormRecord,
   type FormSchema,
   type FormVersionRecord,
+  type QuestionType,
   type SessionState
 } from "@/lib/types";
 
@@ -31,20 +28,75 @@ export interface UpdateSessionData {
   branchTraceJson: string;
 }
 
-export interface WorkspaceData {
-  id: string;
-  name: string;
-  createdAt: string;
-}
-
 export interface AuditEventPayload {
   formId?: string;
   title?: string;
   version?: number;
-  targetId?: string;
   name?: string;
-  host?: string;
-  databaseName?: string;
+}
+
+export interface SubmissionFilterInput {
+  status?: string | null;
+  version?: number | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  branchContains?: string | null;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface AnswerFactRecord {
+  questionId: string;
+  questionType: QuestionType;
+  optionId: string | null;
+  textValue: string | null;
+  numberValue: number | null;
+  flowPath: string;
+  answeredAt: string;
+}
+
+export interface SubmissionRecordDetail {
+  submissionId: string;
+  workspaceId: string;
+  formId: string;
+  versionNumber: number;
+  status: "in_progress" | "completed";
+  startedAt: string;
+  completedAt: string | null;
+  branchTrace: string[];
+  raw: Array<{
+    questionId: string;
+    answerJson: string;
+    answeredAt: string;
+    flowPath: string;
+  }>;
+  facts: AnswerFactRecord[];
+  source: "sqlite" | "mysql";
+}
+
+export interface SubmissionListResult {
+  page: number;
+  pageSize: number;
+  total: number;
+  items: Array<{
+    submissionId: string;
+    status: string;
+    versionNumber: number;
+    startedAt: string;
+    completedAt: string | null;
+    branchTrace: string[];
+    source: "sqlite" | "mysql";
+  }>;
+}
+
+export interface SubmissionExportRecord {
+  submissionId: string;
+  versionNumber: number;
+  startedAt: string;
+  completedAt: string | null;
+  status: string;
+  branchTrace: string[];
+  facts: AnswerFactRecord[];
 }
 
 export interface FormStorage {
@@ -80,37 +132,28 @@ export interface SessionStorage {
   isSessionExpired(session: Pick<SessionState, "expiresAt">): boolean;
 }
 
-export interface DbTargetStorage {
-  testDbTarget(input: DbTargetInput): Promise<{ ok: boolean }>;
-  setActiveDbTarget(workspaceId: string, input: DbTargetInput): Promise<{ targetId: string }>;
-  getActiveDbTarget(workspaceId: string): Promise<DbTargetConfig | null>;
+export interface SubmissionStorage {
+  persistCompletedSubmission(session: SessionState, schema: FormSchema): Promise<{ submissionId: string }>;
+  getSubmissionById(
+    workspaceId: string,
+    formId: string,
+    submissionId: string
+  ): Promise<SubmissionRecordDetail | null>;
+  listSubmissionsForForm(
+    workspaceId: string,
+    formId: string,
+    filters: SubmissionFilterInput
+  ): Promise<SubmissionListResult>;
+  listSubmissionExports(workspaceId: string, formId: string): Promise<SubmissionExportRecord[]>;
 }
 
 export interface AuditStorage {
-  writeEvent(
-    workspaceId: string,
-    actor: string,
-    eventType: string,
-    payload: AuditEventPayload,
-    connection?: PoolConnection
-  ): Promise<void>;
-}
-
-export interface PlatformSettingsStorage {
-  get(key: string): Promise<string | null>;
-  set(key: string, value: string, encrypt: boolean): Promise<void>;
+  writeEvent(workspaceId: string, actor: string, eventType: string, payload: AuditEventPayload): Promise<void>;
 }
 
 export interface Storage {
   forms: FormStorage;
   sessions: SessionStorage;
-  dbTargets: DbTargetStorage;
+  submissions: SubmissionStorage;
   audit: AuditStorage;
-  platformSettings: PlatformSettingsStorage;
-  workspaces: WorkspaceStorage;
-}
-
-export interface WorkspaceStorage {
-  get(workspaceId: string): Promise<WorkspaceData | null>;
-  set(workspaceId: string, data: WorkspaceData): Promise<void>;
 }

@@ -171,7 +171,7 @@ export async function GET(
       versionNumber: submission.versionNumber,
       startedAt: submission.startedAt,
       completedAt: submission.completedAt,
-      source: submission.workspaceId === "memory" ? "memory" : "platform",
+      source: submission.source,
       branchTrace: submission.branchTrace,
       branchTraceReadable,
       groupedAnswers

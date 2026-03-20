@@ -34,7 +34,7 @@ export async function POST(
       return jsonError("Session not found", 404);
     }
 
-    if (isSessionExpired(session)) {
+    if (await isSessionExpired(session)) {
       return jsonError("Session expired", 410);
     }
 

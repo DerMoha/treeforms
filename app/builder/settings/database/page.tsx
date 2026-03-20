@@ -5,8 +5,7 @@ import { type NextRequest } from "next/server";
 
 import { readAdminSession } from "@/lib/server/auth";
 import DatabaseConfig from "@/components/settings/DatabaseConfig";
-import { getPlatformDbConfig } from "@/lib/db/app-store";
-import { PLATFORM_SUBMISSION_DB_URL, APP_DB_URL } from "@/lib/server/constants";
+import { getPlatformDbSettings } from "@/lib/db/app-store";
 
 export default async function SettingsDatabasePage() {
   const cookieStore = await cookies();
@@ -15,17 +14,7 @@ export default async function SettingsDatabasePage() {
     redirect("/login?next=/builder/settings/database");
   }
 
-  const config = await getPlatformDbConfig();
-  const hasEnvVar = Boolean(PLATFORM_SUBMISSION_DB_URL || APP_DB_URL);
-  
-  let currentSource: "environment-variable" | "stored-configuration" | "none";
-  if (config) {
-    currentSource = "stored-configuration";
-  } else if (hasEnvVar) {
-    currentSource = "environment-variable";
-  } else {
-    currentSource = "none";
-  }
+  const settings = await getPlatformDbSettings();
 
   return (
     <main className="container page-stack">
@@ -33,15 +22,11 @@ export default async function SettingsDatabasePage() {
         <header style={{ marginBottom: "1.5rem" }}>
           <h1>Database Settings</h1>
           <p className="subtitle">
-            Configure where form submissions are stored
+            Choose the single database backend used by TreeForms
           </p>
         </header>
 
-        <DatabaseConfig
-          initialConfig={config}
-          currentSource={currentSource}
-          hasEnvVar={hasEnvVar}
-        />
+        <DatabaseConfig initialSettings={settings} />
       </section>
     </main>
   );

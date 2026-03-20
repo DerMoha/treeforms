@@ -55,7 +55,7 @@ export async function POST(
 
       if (
         resumed &&
-        !isSessionExpired(resumed) &&
+        !(await isSessionExpired(resumed)) &&
         resumed.formId === published.formId &&
         resumed.versionNumber === published.versionNumber
       ) {

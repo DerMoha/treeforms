@@ -1,10 +1,6 @@
 export const DEFAULT_WORKSPACE_ID = process.env.DEFAULT_WORKSPACE_ID ?? "workspace_demo";
 export const DEFAULT_WORKSPACE_NAME = process.env.DEFAULT_WORKSPACE_NAME ?? "Demo Workspace";
 
-export const APP_DB_URL = process.env.APP_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
-export const PLATFORM_SUBMISSION_DB_URL =
-  process.env.SUBMISSION_DATABASE_URL ?? process.env.APP_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
-
 export const IS_PRODUCTION = process.env.NODE_ENV === "production";
 export const IS_TEST = process.env.NODE_ENV === "test";
 
@@ -16,8 +12,6 @@ export const RESPONDENT_SESSION_TTL_SECONDS = readIntEnv("RESPONDENT_SESSION_TTL
 });
 
 export const PUBLIC_API_CORS_ORIGINS = readCsvEnv("PUBLIC_API_CORS_ORIGINS");
-export const DB_TARGET_TEST_ALLOWED_HOSTS = readCsvEnv("DB_TARGET_TEST_ALLOWED_HOSTS");
-export const DB_TARGET_TEST_ALLOW_PRIVATE = process.env.DB_TARGET_TEST_ALLOW_PRIVATE === "1";
 export const TRUST_X_FORWARDED_FOR = process.env.TRUST_X_FORWARDED_FOR === "1";
 
 let cachedCredentialKey: string | null = null;

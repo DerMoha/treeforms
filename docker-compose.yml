@@ -25,10 +25,11 @@ services:
         condition: service_healthy
     ports:
       - "${APP_PORT:-3000}:3000"
+    volumes:
+      - app_data:/app/.data
     environment:
       NODE_ENV: production
-      APP_DATABASE_URL: mysql://${MARIADB_USER:-treeforms}:${MARIADB_PASSWORD}@db:3306/${MARIADB_DATABASE:-treeforms}
-      SUBMISSION_DATABASE_URL: mysql://${MARIADB_USER:-treeforms}:${MARIADB_PASSWORD}@db:3306/${MARIADB_DATABASE:-treeforms}
+      LOCAL_SQLITE_PATH: /app/.data/treeforms.sqlite
       DEFAULT_WORKSPACE_ID: ${DEFAULT_WORKSPACE_ID:-workspace_demo}
       DEFAULT_WORKSPACE_NAME: ${DEFAULT_WORKSPACE_NAME:-Demo Workspace}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?Set CREDENTIAL_ENCRYPTION_KEY (32+ chars) in .env.docker}
@@ -37,9 +38,8 @@ services:
       ADMIN_SESSION_TTL_SECONDS: ${ADMIN_SESSION_TTL_SECONDS:-28800}
       RESPONDENT_SESSION_TTL_SECONDS: ${RESPONDENT_SESSION_TTL_SECONDS:-86400}
       PUBLIC_API_CORS_ORIGINS: ${PUBLIC_API_CORS_ORIGINS:-}
-      DB_TARGET_TEST_ALLOWED_HOSTS: ${DB_TARGET_TEST_ALLOWED_HOSTS:-}
-      DB_TARGET_TEST_ALLOW_PRIVATE: ${DB_TARGET_TEST_ALLOW_PRIVATE:-0}
       TRUST_X_FORWARDED_FOR: ${TRUST_X_FORWARDED_FOR:-0}
 
 volumes:
+  app_data:
   db_data:

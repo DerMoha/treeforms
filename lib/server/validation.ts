@@ -13,15 +13,6 @@ export const publishInputSchema = z.object({
   actor: z.string().trim().min(1).max(128).optional()
 });
 
-export const dbTargetInputSchema = z.object({
-  name: z.string().trim().min(1).max(255),
-  host: z.string().trim().min(1).max(255),
-  port: z.coerce.number().int().min(1).max(65_535),
-  user: z.string().trim().min(1).max(255),
-  password: z.string().min(1).max(4096),
-  databaseName: z.string().trim().min(1).max(255)
-});
-
 export const startSessionInputSchema = z.object({
   resumeToken: z
     .string()
@@ -56,16 +47,21 @@ export const loginInputSchema = z.object({
   next: z.string().trim().max(1024).optional()
 });
 
-export const platformDbConfigSchema = z.object({
-  mode: z.enum(["env-var", "mysql", "sqlite"]),
-  host: z.string().trim().max(255).optional(),
-  port: z.coerce.number().int().min(1).max(65_535).optional(),
-  database: z.string().trim().max(255).optional(),
-  username: z.string().trim().max(255).optional(),
-  password: z.string().max(4096).optional(),
-  sslMode: z.enum(["disabled", "preferred", "required"]).optional(),
-  sslCaCert: z.string().max(65535).optional(),
-  sslClientCert: z.string().max(65535).optional(),
-  sslClientKey: z.string().max(65535).optional(),
-  sqlitePath: z.string().trim().max(1024).optional()
-});
+export const platformDbConfigSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("sqlite"),
+    sqlitePath: z.string().trim().min(1).max(1024)
+  }),
+  z.object({
+    mode: z.literal("mysql"),
+    host: z.string().trim().min(1).max(255),
+    port: z.coerce.number().int().min(1).max(65_535),
+    database: z.string().trim().min(1).max(255),
+    username: z.string().trim().min(1).max(255),
+    password: z.string().max(4096).optional(),
+    sslMode: z.enum(["disabled", "preferred", "required"]).default("disabled"),
+    sslCaCert: z.string().max(65535).optional(),
+    sslClientCert: z.string().max(65535).optional(),
+    sslClientKey: z.string().max(65535).optional()
+  })
+]);
