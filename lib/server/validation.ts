@@ -42,6 +42,13 @@ export const submissionsQuerySchema = z.object({
   pageSize: z.coerce.number().int().min(1).max(200).optional()
 });
 
+export const submissionSummaryQuerySchema = z.object({
+  status: z.enum(["completed", "in_progress"]).optional(),
+  version: z.coerce.number().int().min(1).optional(),
+  dateFrom: z.string().datetime().optional(),
+  dateTo: z.string().datetime().optional()
+});
+
 export const loginInputSchema = z.object({
   password: z.string().min(1).max(2048),
   next: z.string().trim().max(1024).optional()
