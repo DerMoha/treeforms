@@ -233,6 +233,17 @@ class RelationalFormStorage {
 
     await this.client.transaction(async (tx) => {
       const now = nowIso();
+
+      const existingForm = await queryOne<FormRow>(
+        tx,
+        `SELECT id, workspace_id, slug, title FROM forms WHERE id = ? LIMIT 1`,
+        [formId]
+      );
+
+      if (!existingForm) {
+        throw new Error(`Form ${formId} not found`);
+      }
+
       const existing = await queryOne<{ form_id: string }>(
         tx,
         `SELECT form_id FROM drafts WHERE form_id = ? LIMIT 1`,
@@ -253,8 +264,21 @@ class RelationalFormStorage {
         ]);
       }
 
-      await tx.execute(`UPDATE forms SET title = ?, updated_at = ? WHERE id = ?`, [
+      let newSlug = existingForm.slug;
+      if (schema.title !== existingForm.title) {
+        const existingSlugs = await tx.query<{ slug: string }>(
+          `SELECT slug FROM forms WHERE workspace_id = ?`,
+          [existingForm.workspace_id]
+        );
+        newSlug = pickUniqueSlug(
+          slugify(schema.title),
+          new Set(existingSlugs.map((row) => String(row.slug)))
+        );
+      }
+
+      await tx.execute(`UPDATE forms SET title = ?, slug = ?, updated_at = ? WHERE id = ?`, [
         schema.title,
+        newSlug,
         now,
         formId
       ]);

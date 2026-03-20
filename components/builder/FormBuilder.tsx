@@ -24,6 +24,7 @@ import {
   returnTargetLabel,
   updateQuestionType
 } from "@/lib/builder-utils";
+import { slugify } from "@/lib/ids";
 import { type FormSchema, type QuestionNode, type QuestionType } from "@/lib/types";
 
 interface VersionSummary {
@@ -68,6 +69,8 @@ export function FormBuilder({ formId }: Props) {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const flowCardShellRef = useRef<HTMLElement | null>(null);
   const [scrollToFlowTopToken, setScrollToFlowTopToken] = useState(0);
+  const [originalTitle, setOriginalTitle] = useState("");
+  const [pendingTitleSave, setPendingTitleSave] = useState(false);
 
   const latestVersion = useMemo(
     () => [...versions].sort((a, b) => b.versionNumber - a.versionNumber)[0] ?? null,
@@ -89,6 +92,7 @@ export function FormBuilder({ formId }: Props) {
       setSchema(payload.draft.schema);
       setSlug(payload.form.slug);
       setVersions(payload.versions ?? []);
+      setOriginalTitle(payload.draft.schema.title);
     } catch (reason) {
       setErrors([reason instanceof Error ? reason.message : "Unable to load form"]);
     } finally {
@@ -197,6 +201,20 @@ export function FormBuilder({ formId }: Props) {
       return;
     }
 
+    const isPublished = latestVersion !== null;
+    const titleChanged = schema.title !== originalTitle;
+
+    if (isPublished && titleChanged && !pendingTitleSave) {
+      setPendingTitleSave(true);
+      const confirmed = window.confirm(
+        `Changing the title will also change the form's URL slug from "${slug}" to "${slugify(schema.title)}".\n\nThis form has been published. Existing share links may break.\n\nProceed anyway?`
+      );
+      if (!confirmed) {
+        setPendingTitleSave(false);
+        return;
+      }
+    }
+
     setSaving(true);
     setErrors([]);
     setWarnings([]);
@@ -220,6 +238,7 @@ export function FormBuilder({ formId }: Props) {
 
       setToast("Draft saved");
       setTimeout(() => setToast(null), 2200);
+      setPendingTitleSave(false);
       await loadForm();
     } catch (reason) {
       setErrors([reason instanceof Error ? reason.message : "Unable to save draft"]);
@@ -396,7 +415,14 @@ export function FormBuilder({ formId }: Props) {
 
         <div className="inline-stack">
           <button type="button" className="button-primary" disabled={saving} onClick={saveDraft}>
-            {saving ? "Saving..." : "Save Draft"}
+            {saving ? (
+              <>
+                <span className="spinner" />
+                Saving...
+              </>
+            ) : (
+              "Save Draft"
+            )}
           </button>
           <button
             type="button"
@@ -404,7 +430,14 @@ export function FormBuilder({ formId }: Props) {
             disabled={publishing}
             onClick={publish}
           >
-            {publishing ? "Publishing..." : "Publish Version"}
+            {publishing ? (
+              <>
+                <span className="spinner spinner-dark" />
+                Publishing...
+              </>
+            ) : (
+              "Publish Version"
+            )}
           </button>
           <a className="button-secondary" href={`/api/forms/${formId}/draft/export.json`}>
             Export JSON
@@ -415,7 +448,14 @@ export function FormBuilder({ formId }: Props) {
             disabled={importing}
             onClick={openImportDialog}
           >
-            {importing ? "Importing..." : "Import JSON"}
+            {importing ? (
+              <>
+                <span className="spinner spinner-dark" />
+                Importing...
+              </>
+            ) : (
+              "Import JSON"
+            )}
           </button>
 
           <Link
@@ -452,7 +492,11 @@ export function FormBuilder({ formId }: Props) {
             Slug: <strong>{slug}</strong>
           </span>
           {latestVersion ? <span className="badge">latest v{latestVersion.versionNumber}</span> : null}
-          {toast ? <span className="state-text success">{toast}</span> : null}
+          {toast ? (
+            <span className="state-text success fade-in" key={toast}>
+              {toast}
+            </span>
+          ) : null}
         </div>
 
         {errors.length > 0 ? (
