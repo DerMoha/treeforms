@@ -10,7 +10,7 @@ export default async function LoginPage({
   const nextPath = normalizeSafeRedirect(query.next, "/builder");
 
   return (
-    <main className="container page-stack">
+    <main className="centered-shell">
       <LoginForm nextPath={nextPath} />
     </main>
   );
