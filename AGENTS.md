@@ -1,184 +1,150 @@
-# Agent Guidelines for TreeForms
+# AGENTS.md
 
-This document provides guidance for AI agents working on the TreeForms codebase.
+Guidance for agentic coding tools working in `/Users/tension/CodexPlayground/treeforms`.
 
-## Project Overview
+## Rule Sources
 
-TreeForms is a Next.js-based form builder platform that supports branching logic. It's a TypeScript monorepo using modern React patterns and the App Router.
+- This file is the primary agent guide for the repository.
+- No Cursor rules were found in `.cursor/rules/`.
+- No `.cursorrules` file was found.
+- No Copilot rules were found in `.github/copilot-instructions.md`.
+- If any of those files are added later, merge their instructions into this document.
 
-## Build/Lint/Test Commands
+## Project Snapshot
+
+- TreeForms is a single Next.js App Router app written in strict TypeScript.
+- The product is a branch-first form builder with an authenticated builder UI and a public runtime.
+- Core domains live in `lib/`, server routes in `app/api/`, UI in `app/` and `components/`, and tests in `test/`.
+- Storage supports SQLite via `better-sqlite3` and MySQL/MariaDB via `mysql2`.
+- Zod is the validation layer, and Vitest is the test runner.
+
+## Setup And Commands
 
 ```bash
-# Development
-npm run dev              # Start development server (Next.js)
-npm run build            # Build production application
-npm run start            # Start production server
+# Install
+npm install
 
-# Type checking & Linting
-npm run typecheck        # Run TypeScript type checking (next typegen + tsc)
-npm run lint             # Alias for typecheck
+# Local development
+npm run dev
 
-# Testing
-npm run test             # Run all tests once (vitest run)
-npm run test:watch       # Run tests in watch mode
+# Production build and start
+npm run build
+npm run start
 
-# Single test execution
-npx vitest run test/schema.test.ts                    # Run specific file
-npx vitest run -t "accepts a valid branching schema"  # Run by test name
-npx vitest run --reporter=verbose                     # Run with verbose output
+# Type checking / lint gate
+npm run typecheck
+npm run lint
+
+# Full test suite
+npm run test
+npm run test:watch
+
+# Run a single test file
+npx vitest run test/schema.test.ts
+npx vitest run test/http.test.ts
+
+# Run a single test by name
+npx vitest run -t "accepts a valid branching schema"
+npx vitest run test/http.test.ts -t "parses valid streamed JSON payloads"
+
+# Extra debugging
+npx vitest run --reporter=verbose
 ```
 
-## Code Style Guidelines
+## CI Expectations
 
-### TypeScript
+- CI runs on Node 20.
+- The check order is `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
+- `npm run lint` is currently an alias for `npm run typecheck`; there is no separate ESLint config.
+- Before finishing a meaningful change, run the narrowest relevant check first, then broader coverage if needed.
 
-- **Strict mode**: Always enabled. No `any` types unless absolutely necessary.
-- **Path alias**: Use `@/` prefix for imports from project root (e.g., `@/lib/types`).
-- **Type imports**: Use `import { type Foo }` when importing types only.
-- **Interfaces vs Types**: Prefer `interface` for object shapes, `type` for unions/complex types.
-- **Naming**: PascalCase for types/interfaces, camelCase for functions/variables.
+## Repository Map
 
-### Functions
+- `app/`: App Router pages, layouts, and API routes.
+- `app/api/`: auth, forms, public runtime, and settings endpoints.
+- `components/`: builder, runtime, analytics, auth, and settings UI.
+- `lib/`: schema engine, auth, validation, security, DB/storage, and utilities.
+- `test/`: Vitest coverage for schema, engine, auth, HTTP helpers, and security hardening.
 
-- Use function declarations for module exports: `export function foo(): Bar`
-- Use arrow functions for callbacks and inline handlers
-- Early returns to reduce nesting
-- Async/await for asynchronous code (no raw promises)
-- Type guards with `value is Type` return type
+## Formatting Conventions
 
-### Imports
+- Match the existing style in nearby files; no Prettier config is checked in.
+- Use 2-space indentation, semicolons, and double quotes.
+- Keep lines readable; split long argument lists, objects, and JSX props like nearby code.
+- Add blank lines between imports, constants, exported declarations, and helper sections.
+- Prefer consistency with the edited file over personal style preferences.
 
-```typescript
-// Order: 1) External deps, 2) Internal modules, 3) Type imports
-default
-import { z } from "zod";
-import { NextRequest } from "next/server";
+## Imports And Types
 
-import { HttpError } from "@/lib/server/http";
-import { type FormSchema } from "@/lib/types";
-```
+- Order imports as framework/external packages, blank line, then internal `@/` imports.
+- Keep side-effect imports such as `import "./globals.css";` separate.
+- Prefer the `@/` alias over deep relative paths.
+- Import types explicitly with `import type` or `type` specifiers when practical.
+- `strict` mode is enabled; satisfy it without workarounds.
+- Avoid `any`; prefer `unknown`, generics, discriminated unions, and narrowing helpers.
+- Prefer `interface` for domain objects and props, and `type` for unions or composed aliases.
+- Export named functions for reusable module APIs; use arrow functions for short local helpers and callbacks.
 
-### Error Handling
+## Naming And Style
 
-- Use custom error classes extending Error (see `HttpError`, `RuntimeValidationError`)
-- Set error.name for instanceof checks
-- API routes: Return structured error response `{ error: string, details: unknown | null }`
-- Always console.error with context before returning 500
-- Expose error details for 5xx only in non-production environments
+- Use `PascalCase` for components and domain types, `camelCase` for functions and variables, and `SCREAMING_SNAKE_CASE` for constants.
+- Route handler exports must use Next.js names like `GET`, `POST`, `PUT`, and `DELETE`.
+- Keep names domain-specific: `workspaceId`, `formId`, `questionId`, `versionNumber`, `resumeToken`.
+- Prefer early returns, explicit conditionals, and small pure helpers over deeply nested logic.
+- Prefer immutable updates with spread syntax and non-mutating array helpers unless local mutation is clearly simpler.
 
-```typescript
-try {
-  // ... operation
-} catch (error) {
-  if (error instanceof HttpError) {
-    return errorResponse(error.message, error.details, error.status);
-  }
-  console.error("Failed to do something:", error);
-  return errorResponse("Something went wrong", null, 500);
-}
-```
+## React And Routes
 
-### API Routes (Next.js App Router)
+- Add `"use client";` only when hooks, browser APIs, or client interactivity are required.
+- Keep server-capable modules free of client-only imports.
+- Use App Router route handlers in `route.ts` files.
+- Keep page components and layouts small; move heavier behavior into `components/` or `lib/`.
+- In client components, handle loading, submitting, success, and error states explicitly.
+- Follow existing fetch patterns that parse JSON once and surface `payload.error ?? fallbackMessage`.
+- Read `app/api/forms/route.ts` as the baseline pattern for authenticated admin routes.
+- Resolve the admin workspace through `workspaceIdFromRequest()` instead of re-reading cookies manually.
 
-- File: `route.ts` in directory structure matching the API path
-- Named exports: `POST`, `GET`, `PUT`, `DELETE`, etc.
-- Always apply rate limiting at entry points
-- Validate input with Zod schemas
-- Use `errorResponse()` helper for consistent error format
+## Validation And Errors
 
-```typescript
-export async function POST(request: NextRequest) {
-  await applyRateLimit(request);
-  
-  const body = await request.json();
-  const parsed = schema.safeParse(body);
-  
-  if (!parsed.success) {
-    return errorResponse("Invalid input", parsed.error.errors, 400);
-  }
-  
-  // ... handle request
-  return Response.json({ data: result });
-}
-```
+- Put reusable request schemas in `lib/server/validation.ts`.
+- Use Zod for external input validation, and trim user-facing strings unless whitespace is intentionally meaningful.
+- Use `z.coerce.number()` for query params or form-like numeric input when coercion is desired.
+- Wrap route bodies in `try/catch` and return `handleRouteError("context message", error)` on failure.
+- Prefer `jsonOk()` and `jsonError()` from `lib/server/http.ts` over ad hoc JSON responses.
+- Use `readJson<T>()` for bounded JSON parsing instead of raw `request.json()` where request bodies need limits.
+- Use `HttpError` for expected failures, and log unexpected failures with context via `console.error("Meaningful message", error);`.
 
-### Validation
+## Security And Data
 
-- Use Zod for all input validation
-- Define schemas in `lib/server/validation.ts` for reusability
-- Coerce types when needed (e.g., `z.coerce.number()`)
-- Add `.trim()` to string validators
-- Use descriptive error messages
+- Treat builder and settings routes as authenticated admin surfaces.
+- Enforce CSRF on state-changing admin routes with `enforceCsrf(request)`.
+- Apply rate limiting at public and admin write endpoints using `applyRateLimit()`.
+- Never log passwords, tokens, raw credentials, or encryption keys.
+- Respect the `TRUST_X_FORWARDED_FOR` guard when handling forwarded IP headers.
+- Keep storage logic in `lib/db/` and `lib/db/storage/`, and use parameterized queries only.
+- Preserve current transaction-oriented patterns and keep SQLite and MySQL behavior aligned where possible.
 
-### Testing
+## Testing Conventions
 
-- Test files: `test/**/*.test.ts`
-- Use Vitest with globals enabled
-- Descriptive test names explaining the behavior
-- Use factories/helpers for test data (see `validSchema()` pattern)
-- Assert on both happy paths and error cases
+- Test files live in `test/**/*.test.ts`.
+- Import Vitest APIs from `vitest` explicitly.
+- Use descriptive test names that state behavior, not implementation details.
+- Prefer small local factories like `validSchema()` for readable setup.
+- Cover both happy paths and failure cases, especially around validation, auth, branching, and HTTP boundaries.
+- For env-sensitive modules, mirror the existing pattern that resets modules and safely rewrites `process.env`.
 
-```typescript
-import { describe, expect, it } from "vitest";
-import { someFunction } from "@/lib/module";
+## Environment Notes
 
-describe("someFunction", () => {
-  it("returns expected result for valid input", () => {
-    const result = someFunction("input");
-    expect(result).toBe("expected");
-  });
-});
-```
+- Copy `.env.example` for local setup if needed.
+- Required non-test secrets include `CREDENTIAL_ENCRYPTION_KEY`, `ADMIN_LOGIN_PASSWORD`, and `ADMIN_SESSION_SECRET`.
+- Do not commit `.env` files or secret material.
+- Access environment values through `process.env` or the existing constants/helpers.
+- Preserve the test fallbacks in `lib/server/constants.ts` unless you intentionally change test behavior.
 
-### Database
+## Practical Agent Tips
 
-- Use better-sqlite3 for local/dev, mysql2 for production
-- Store module in `lib/db/`
-- Parameterized queries only (never string concatenation)
-- Connection pooling for production databases
-
-### Security
-
-- Always validate and sanitize inputs
-- Apply rate limiting to all public endpoints
-- CSRF protection on state-changing operations
-- Use crypto module for secure random generation
-- Store passwords with bcrypt hashing
-- Never log sensitive data (passwords, tokens)
-
-### General Patterns
-
-- Pure functions preferred over mutations
-- Immutable updates using spread operator
-- Nullish coalescing (`??`) for defaults
-- Optional chaining (`?.`) for safe access
-- Destructuring for cleaner code
-- Meaningful variable names (avoid single letters except in loops)
-
-## Project Structure
-
-```
-app/              # Next.js App Router pages and API routes
-  api/            # API route handlers
-    [feature]/    # Feature-based organization
-  layout.tsx      # Root layout
-  page.tsx        # Root page
-components/       # React components
-lib/              # Core library code
-  server/         # Server-side utilities
-  db/             # Database layer
-  client/         # Client-side utilities
-  security/       # Security utilities
-test/             # Test files
-```
-
-## Environment Variables
-
-- Copy `.env.example` to `.env` for local development
-- Never commit `.env` files
-- Validate env vars at startup (fail fast pattern)
-- Use `process.env` directly, don't destructure
-
-## Database Migrations
-
-The application uses SQLite with automatic schema initialization on startup. No manual migrations needed for local development.
+- Start by reading the closest existing implementation and follow local conventions.
+- Prefer surgical changes over broad refactors unless the task explicitly calls for larger redesign work.
+- When editing API or storage code, check whether a matching test file already exists and extend it.
+- Keep new routes, helpers, and response shapes consistent with the existing auth, forms, and settings code.
+- If new Cursor or Copilot rule files appear later, update this document so agents have one canonical summary.
